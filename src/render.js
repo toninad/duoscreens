@@ -179,12 +179,9 @@ export function buildComposition(layer, size, p) {
     } else {
       const m = Math.min(sw, sh);
       scr.add(new Konva.Rect({ x: bx, y: by, width: bw, height: bh, fill: '#d9d5d1' }));
-      const arm = m * 0.075, bar = Math.max(2, m * 0.012), cx = sx + sw / 2, cy = sy + sh / 2 - m * 0.04;
-      scr.add(new Konva.Rect({ x: cx - arm, y: cy - bar / 2, width: arm * 2, height: bar, cornerRadius: bar / 2, fill: '#8c8681' }));
-      scr.add(new Konva.Rect({ x: cx - bar / 2, y: cy - arm, width: bar, height: arm * 2, cornerRadius: bar / 2, fill: '#8c8681' }));
-      const label = new Konva.Text({ text: 'Add screenshot', fontFamily: 'Inter', fontStyle: '600', fontSize: m * 0.05, fill: '#8c8681', width: sw, align: 'center' });
-      label.position({ x: sx, y: cy + arm + m * 0.045 });
-      scr.add(label);
+      const arm = m * 0.06, bar = Math.max(2, m * 0.01), cx = sx + sw / 2, cy = sy + sh / 2;
+      scr.add(new Konva.Rect({ x: cx - arm, y: cy - bar / 2, width: arm * 2, height: bar, cornerRadius: bar / 2, fill: '#a29b95' }));
+      scr.add(new Konva.Rect({ x: cx - bar / 2, y: cy - arm, width: bar, height: arm * 2, cornerRadius: bar / 2, fill: '#a29b95' }));
     }
     layer.add(scr);
     if (frame) layer.add(new Konva.Image({ image: frame.img, x: dx, y: dy, width: dw, height: dh }));

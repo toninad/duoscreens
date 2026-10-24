@@ -295,14 +295,14 @@ function buildStructure() {
       group.shots.forEach((shot, i) => {
         const card = el('article', 'shot-card');
         card.dataset.id = shot.id;
-        card.innerHTML = `<header class="card-head"><span class="card-num">${pad2(i + 1)}</span><span class="card-tag"></span>
-          <span class="card-tools">
+        // Quiet by default: just the frame and one caption line. Tools appear on hover or selection.
+        card.innerHTML = '<div class="card-frames"></div>';
+        const tools = el('div', 'card-tools', `
             <button type="button" data-a="dup" title="Duplicate as a variation" aria-label="Duplicate" ${countOn(group, targetOf(shot).id) >= MAX_SHOTS ? 'disabled' : ''}>${ICON.dup}</button>
             <button type="button" data-a="left" title="Move left" aria-label="Move left" ${i === 0 ? 'disabled' : ''}>${ICON.left}</button>
             <button type="button" data-a="right" title="Move right" aria-label="Move right" ${i === group.shots.length - 1 ? 'disabled' : ''}>${ICON.right}</button>
-            <button type="button" data-a="del" title="Remove" aria-label="Remove">${ICON.del}</button>
-          </span></header><div class="card-frames"></div>`;
-        card.querySelector('.card-tools').onclick = (e) => {
+            <button type="button" data-a="del" title="Remove" aria-label="Remove">${ICON.del}</button>`);
+        tools.onclick = (e) => {
           const a = e.target.closest('button')?.dataset.a;
           if (a === 'dup') duplicateShot(shot.id);
           else if (a === 'left') moveShot(shot.id, -1);
@@ -348,11 +348,9 @@ function buildStructure() {
           fr.style.height = `${Math.round(size.height * K)}px`;
           const wrap = el('figure', 'frame-wrap');
           wrap.appendChild(fr);
-          if (lang === state.baseLang) {
-            const cap = el('figcaption', 'frame-cap');
-            cap.textContent = `${t.display.label ? t.display.label + ' · ' : ''}${size.width} × ${size.height}`;
-            wrap.appendChild(cap);
-          }
+          const cap = el('figcaption', 'frame-cap', `<span class="card-num">${pad2(i + 1)}</span><span class="cap-text"></span><span class="card-tag"></span>`);
+          if (lang === state.baseLang) cap.querySelector('.cap-text').textContent = `${t.display.label ? t.display.label + ' · ' : ''}${size.width} × ${size.height}`;
+          wrap.append(cap, tools);
           if (poseBox.childElementCount) wrap.appendChild(poseBox);
           framesEl.appendChild(wrap);
           const stage = new Konva.Stage({ container: fr.firstChild, width: Math.round(size.width * K), height: Math.round(size.height * K) });
@@ -369,7 +367,7 @@ function buildStructure() {
         const next = newShot(group);
         nextId--;   // only a preview; the real card is made on click
         const size = sizeOf(next.target, next);
-        const slot = el('div', 'shot-card add-slot', '<header class="card-head"></header>');
+        const slot = el('div', 'shot-card add-slot');
         const add = el('button', 'add-card', `<span class="add-label">${PLUS}<span>Add ${device.short || device.name} screen</span></span>`);
         add.type = 'button';
         add.style.width = `${Math.round(size.width * K)}px`;
