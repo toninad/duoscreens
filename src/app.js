@@ -8,6 +8,8 @@ import { translateTexts, translateConfigured } from './translate.js';
 import { makeSampleScreenshot } from './sample.js';
 
 const $ = (id) => document.getElementById(id);
+const svg = (d) => `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${d}"/></svg>`;
+const ICONS = { up: svg('M4 10l4-4 4 4'), down: svg('M4 6l4 4 4-4'), del: svg('M4.5 4.5l7 7M11.5 4.5l-7 7') };
 const DISPLAYS = ['inner', 'outer'];
 const sizeOf = (d) => DUO_SIZES[d][EXPORT_ORIENTATION];
 
@@ -67,12 +69,12 @@ function renderShotList() {
     const li = document.createElement('li');
     li.className = i === state.selected ? 'active' : '';
     li.innerHTML = `<img alt=""><div class="meta"><b></b><small></small></div>
-      <div class="tools"><button data-a="up" title="Move up">▲</button><button data-a="down" title="Move down">▼</button><button data-a="del" title="Remove">✕</button></div>`;
+      <div class="tools"><button data-a="up" title="Move up" aria-label="Move up">${ICONS.up}</button><button data-a="down" title="Move down" aria-label="Move down">${ICONS.down}</button><button data-a="del" title="Remove" aria-label="Remove">${ICONS.del}</button></div>`;
     li.querySelector('img').src = s.image.src;
     li.querySelector('b').textContent = textFor(s).headline || s.name;
     li.querySelector('small').textContent = `${s.image.naturalWidth}×${s.image.naturalHeight}${s.outerImage ? ' · custom outer' : ''}`;
     li.onclick = (e) => {
-      const a = e.target.dataset?.a;
+      const a = e.target.closest('button')?.dataset.a;
       if (a === 'del') { state.shots.splice(i, 1); state.selected = Math.min(state.selected, state.shots.length - 1); }
       else if (a === 'up' && i > 0) { [state.shots[i - 1], state.shots[i]] = [state.shots[i], state.shots[i - 1]]; state.selected = i - 1; }
       else if (a === 'down' && i < state.shots.length - 1) { [state.shots[i + 1], state.shots[i]] = [state.shots[i], state.shots[i + 1]]; state.selected = i + 1; }
@@ -81,6 +83,20 @@ function renderShotList() {
     };
     list.appendChild(li);
   });
+  requestAnimationFrame(placeIndicator);
+}
+
+// One orange indicator that glides to the selected screenshot instead of a highlight per row.
+function placeIndicator() {
+  const list = $('shotList'), ind = $('shotIndicator');
+  const li = list.children[state.selected];
+  ind.classList.toggle('on', !!li);
+  if (!li) return;
+  const pad = 14;
+  ind.style.setProperty('--y', `${li.offsetTop + pad}px`);
+  ind.style.setProperty('--h', `${li.offsetHeight - pad * 2}px`);
+  ind.style.setProperty('--x', `${li.offsetLeft - list.scrollLeft + 24}px`);
+  ind.style.setProperty('--w', `${li.offsetWidth - 48}px`);
 }
 
 function syncTextInputs() {
@@ -90,6 +106,8 @@ function syncTextInputs() {
   $('subheadline').value = t.subheadline;
   $('textFor').textContent = s ? `· screenshot ${state.selected + 1}` : '';
   for (const id of ['headline', 'subheadline', 'outerFile']) $(id).disabled = !s;
+  $('outerValue').textContent = s?.outerImage ? 'Custom image' : 'Same image';
+  $('outerValue').parentElement.setAttribute('aria-disabled', String(!s));
 }
 
 function renderLangSelect() {
@@ -204,10 +222,14 @@ function setupDropzone() {
     target.addEventListener('dragleave', over(false));
     target.addEventListener('drop', (e) => { over(false)(e); addFiles(e.dataTransfer.files); });
   }
-  $('sampleBtn').onclick = async () => {
+  const addSample = async () => {
     const blob = await makeSampleScreenshot();
     addFiles([new File([blob], 'sample-screenshot.png', { type: 'image/png' })]);
   };
+  $('sampleBtn').onclick = addSample;
+  $('emptySample').onclick = addSample;
+  $('emptyAdd').onclick = () => $('fileInput').click();
+  $('shotList').addEventListener('scroll', placeIndicator, { passive: true });
 }
 
 // ---------- Text & style inputs ----------
@@ -232,7 +254,7 @@ function setupInputs() {
     if (s && e.target.files[0]) { s.outerImage = await loadImage(e.target.files[0]); refresh(); }
     e.target.value = '';
   };
-  window.addEventListener('resize', () => renderPreview());
+  window.addEventListener('resize', () => { renderPreview(); placeIndicator(); });
 }
 
 // ---------- Translate ----------
