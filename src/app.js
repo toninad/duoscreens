@@ -1,6 +1,6 @@
 /* global Konva, JSZip */
 import { PRO, WATERMARK_TEXT, LANGUAGES } from './config.js';
-import { FAMILIES, DEVICES, TARGETS, SCREENS, targetById, loadFrames, getFrame } from './devices.js';
+import { FAMILIES, DEVICES, TARGETS, SCREENS, targetById, deviceById, loadFrames, getFrame, framePreview } from './devices.js';
 import { TEMPLATES, LAYOUTS, FONTS, templateById } from './templates.js';
 import { buildComposition } from './render.js';
 import { canvasToRgbPng } from './png.js';
@@ -17,7 +17,7 @@ const sizeOf = (tid) => targetById(tid).display.size[state.pose[tid]];
 const targetLabel = (t) => t.display.label ? `${t.device.name} · ${t.display.label}` : t.device.name;
 
 const state = {
-  shots: [],            // { id, name, image, images: { [screen]: img }, variants?, style?: overrides, text: { [lang]: { headline, subheadline } } }
+  shots: [],            // { id, images: { [screen]: img }, variants?, style?: overrides, text: { [lang]: { headline, subheadline } } }
   selection: new Set(), // shot ids; empty means "all screenshots" for toolbar edits
   baseLang: 'en',
   langs: ['en'],
@@ -74,14 +74,13 @@ function renderScreenRows(one) {
   const box = $('screenRows');
   box.innerHTML = '';
   const screens = [...new Set(activeTargets().map(t => t.display.screen))];
-  if (screens.length < 2 && !one?.images?.[screens[0]]) return;
   for (const screen of screens) {
     const row = el('label', 'cell row-cell chevron');
     row.innerHTML = '<span></span><span class="value"></span><input type="file" accept="image/png,image/jpeg,image/webp" hidden>';
     row.firstChild.textContent = SCREENS[screen];
-    row.children[1].textContent = !one ? 'Select one screenshot' : one.images?.[screen] ? 'Own image' : one.variants?.[screen] ? 'Sample capture' : 'Same image';
+    row.children[1].textContent = !one ? 'Select one screenshot' : one.images?.[screen] ? 'Replace…' : one.variants?.[screen] ? 'Sample capture' : 'Empty';
     row.setAttribute('aria-disabled', String(!one));
-    row.title = `Use a different capture on the ${SCREENS[screen]}`;
+    row.title = `Choose the capture for the ${SCREENS[screen]}`;
     const input = row.querySelector('input');
     input.dataset.screen = screen;
     input.disabled = !one;
@@ -151,13 +150,13 @@ function textFor(shot, lang) {
   return shot.text[lang] || shot.text[state.baseLang] || { headline: '', subheadline: '' };
 }
 
-// The capture shown on a screen: the screenshot's own image for it, then a sample capture in the
-// matching pose (iPhones borrow the Duo's phone-shaped outer captures), then the main image.
+// Every screen has its own capture: the one added to it, else a sample capture (in the matching pose
+// when there is one). Null means the screen is still empty and shows the "add screenshot" placeholder.
 function imageFor(shot, screen, pose) {
-  const v = shot.variants || {};
-  const pick = (k) => v[k]?.[pose] || v[k]?.portrait;
-  return shot.images?.[screen] || v[screen]?.[pose] || (screen === 'iphone' && pick('duo/outer')) || shot.image;
+  const v = shot.variants?.[screen];
+  return shot.images?.[screen] || v?.[pose] || v?.portrait || v?.landscape || null;
 }
+const hasAnyImage = (shot) => activeTargets().some(t => imageFor(shot, t.display.screen, state.pose[t.id]));
 
 function compositionProps(shot, tid, lang) {
   const t = textFor(shot, lang);
@@ -287,6 +286,13 @@ function buildStructure() {
         const fr = el('div', 'frame', '<div class="frame-stage"></div><div class="text-hits"></div>');
         fr.dataset.target = t.id;
         if (t.device.id === 'duo') fr.dataset.display = t.display.id;
+        // Drop a capture on a frame to put it on that screen.
+        fr.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); fr.classList.add('drop'); });
+        fr.addEventListener('dragleave', () => fr.classList.remove('drop'));
+        fr.addEventListener('drop', (e) => {
+          e.preventDefault(); e.stopPropagation(); fr.classList.remove('drop');
+          setScreenImage(shot.id, t.display.screen, e.dataTransfer.files[0]);
+        });
         fr.style.width = `${Math.round(size.width * K)}px`;
         fr.style.height = `${Math.round(size.height * K)}px`;
         const wrap = el('figure', 'frame-wrap');
@@ -305,6 +311,13 @@ function buildStructure() {
       }
       cards.appendChild(card);
     });
+    if (lang === state.baseLang) {   // an empty card to fill frame by frame
+      const add = el('button', 'add-card', '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg><span>New screenshot</span>');
+      add.type = 'button';
+      add.style.height = `${Math.round(Math.max(...activeTargets().map(t => sizeOf(t.id).height)) * K)}px`;
+      add.onclick = () => { state.shots.push(newShot()); refresh({ fit: true }); };
+      cards.appendChild(add);
+    }
     row.append(head, cards);
     world.appendChild(row);
   }
@@ -340,10 +353,11 @@ function drawAll() {
 }
 
 function renderBoard({ fit = false } = {}) {
-  const has = state.shots.length > 0;
-  $('empty').hidden = has;
+  if (!state.shots.length) state.shots.push(newShot());   // the board always has a card to fill
+  const has = true;
+  $('empty').hidden = true;
   for (const id of ['board', 'dock', 'boardTools', 'zoomTools']) $(id).hidden = !has;
-  $('exportBtn').disabled = !has;
+  $('exportBtn').disabled = !state.shots.some(hasAnyImage);
   $('langLabel').textContent = state.langs.length > 1 ? `${state.langs.length} languages` : 'Translate';
   const targets = activeTargets();
   $('sizeInfo').textContent = targets.length > 2 ? `${targets.length} App Store sizes`
@@ -407,6 +421,15 @@ function placeTextHits(f) {
   const box = f.el.querySelector('.text-hits');
   box.innerHTML = '';
   f.hits = {};
+  const scr = f.nodes.screen;
+  if (scr?.empty) {
+    const add = el('button', 'screen-add');
+    add.type = 'button';
+    add.setAttribute('aria-label', `Add a screenshot to ${targetLabel(targetById(f.target))}`);
+    Object.assign(add.style, { left: `${scr.x * K}px`, top: `${scr.y * K}px`, width: `${scr.width * K}px`, height: `${scr.height * K}px` });
+    add.onclick = (e) => { e.stopPropagation(); pickImageFor(f.shotId, targetById(f.target).display.screen); };
+    box.appendChild(add);
+  }
   for (const key of ['headline', 'subheadline']) {
     const node = f.nodes[key];
     const r = node.getClientRect();
@@ -499,7 +522,7 @@ function setupBoard() {
   const pointers = new Map();
   let drag = null, pinch = null;
   board.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.text-hit, .card-tools, .row-remove, .inline-editor')) return;
+    if (e.target.closest('.text-hit, .screen-add, .add-card, .card-tools, .row-remove, .inline-editor')) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     board.setPointerCapture(e.pointerId);
     if (pointers.size === 2) {
@@ -568,24 +591,60 @@ function loadImage(file) {
 }
 
 const DEFAULT_COPY = [
-  ['Built for the big screen', 'Everything you need, side by side on iPhone Duo.'],
-  ['Pick up where you left off', 'Fold or unfold — your place follows you.'],
+  ['Your best feature, first', 'One line that says why it matters.'],
+  ['Pick up where you left off', 'Your place follows you, on every device.'],
   ['Find what you love', 'Smart search that keeps up with you.'],
-  ['Made to feel at home', 'Thoughtful details on both displays.'],
-  ['Ready on day one', 'Optimized for iPhone Duo.'],
+  ['Made to feel at home', 'Thoughtful details everywhere you look.'],
+  ['Ready on day one', 'Built for the newest iPhones.'],
 ];
 
+function newShot() {
+  const [headline, subheadline] = DEFAULT_COPY[state.shots.length % DEFAULT_COPY.length];
+  return { id: nextId++, images: {}, text: { [state.baseLang]: { headline, subheadline } } };
+}
+
+// The screen in use whose shape is closest to the capture's: a tall capture goes to an iPhone, a
+// square-ish one to the Duo's inner display, and so on.
+function bestScreen(img) {
+  const a = img.width / img.height;
+  let best = null, bestD = Infinity;
+  for (const t of activeTargets()) {
+    const { width, height } = sizeOf(t.id);
+    const d = Math.abs(Math.log(a / (width / height)));
+    if (d < bestD) { bestD = d; best = t.display.screen; }
+  }
+  return best;
+}
+
+/** Bulk add: each capture fills the first screenshot whose matching screen is still empty, else a new one. */
 async function addFiles(files) {
   const images = [...files].filter(f => /^image\//.test(f.type));
   if (!images.length) return toast('Please drop PNG or JPEG screenshots.');
   for (const f of images) {
     try {
       const img = await loadImage(f);
-      const [headline, subheadline] = DEFAULT_COPY[state.shots.length % DEFAULT_COPY.length];
-      state.shots.push({ id: nextId++, name: f.name, image: img, images: {}, text: { [state.baseLang]: { headline, subheadline } } });
+      const screen = bestScreen(img);
+      const pose = (tid) => state.pose[tid];
+      const empty = (s) => !activeTargets().some(t => t.display.screen === screen && imageFor(s, screen, pose(t.id)));
+      let shot = state.shots.find(empty);
+      if (!shot) { shot = newShot(); state.shots.push(shot); }
+      shot.images = { ...shot.images, [screen]: img };
     } catch (e) { toast(e.message); }
   }
   refresh({ fit: true });
+}
+
+// One screen of one screenshot: from the plus on an empty screen, or a file dropped on a frame.
+let pendingScreen = null;
+function pickImageFor(shotId, screen) {
+  pendingScreen = { shotId, screen };
+  $('frameFile').click();
+}
+async function setScreenImage(shotId, screen, file) {
+  const shot = state.shots.find(s => s.id === shotId);
+  if (!shot || !file || !/^image\//.test(file.type)) return;
+  try { shot.images = { ...shot.images, [screen]: await loadImage(file) }; refresh(); }
+  catch (e) { toast(e.message); }
 }
 
 const loadUrl = (src) => new Promise((resolve) => {
@@ -627,7 +686,7 @@ function setupDropzone() {
     if (shots.length) {
       // The captures were taken unfolded in landscape, so show the inner display that way.
       if (shots.some(s => s.variants['duo/inner']?.landscape)) state.pose['duo/inner'] = 'landscape';
-      state.shots.push(...shots);
+      state.shots = [...state.shots.filter(hasAnyImage), ...shots];   // samples replace untouched empty cards
       syncDeviceInputs();
       return refresh({ fit: true });
     }
@@ -635,8 +694,12 @@ function setupDropzone() {
     const blob = await makeSampleScreenshot(width, height);
     addFiles([new File([blob], 'sample-screenshot.png', { type: 'image/png' })]);
   };
-  $('emptySample').onclick = addSample;
-  $('emptyAdd').onclick = () => $('fileInput').click();
+  $('sampleBtn').onclick = addSample;
+  $('frameFile').onchange = (e) => {
+    if (pendingScreen) setScreenImage(pendingScreen.shotId, pendingScreen.screen, e.target.files[0]);
+    pendingScreen = null;
+    e.target.value = '';
+  };
 }
 
 // ---------- Text & style inputs ----------
@@ -650,48 +713,80 @@ function setupInputs() {
 }
 
 // ---------- Devices: which ones, their finish and pose ----------
+// A centred dialog with a tile per kind of device, showing its real frame with a screenshot inside.
+// It opens on first launch and from the bottom bar. Free makes one device at a time; Pro any number.
 const POSE_ICON = {
   portrait: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6" y="3" width="8" height="14" rx="2.2"/></svg>',
   landscape: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="6" width="14" height="8" rx="2.2"/></svg>',
 };
+const CHECK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8.5l2.6 2.5L12 5.5"/></svg>';
+const SAMPLE_PREVIEW = { 'duo/inner': 'samples/inner-landscape-show.webp', 'duo/outer': 'samples/outer-portrait-home.webp', iphone: 'samples/outer-portrait-home.webp' };
+const PREFS_KEY = 'hhstudio.devices';
 
 function syncDeviceInputs() {
   const on = DEVICES.filter(d => state.devices.includes(d.id));
   $('devicesLabel').textContent = on.map(d => d.name).join(' + ');
-  renderDeviceList();
+  if ($('deviceDialog').open) renderDeviceList();
+  saveDevicePrefs();
 }
 
-// A row per kind of device with a switch. Turning one on shows its details right under it:
-// the model (iPhone), the finish and, for the Duo, each display's orientation.
+// The picture in a tile: the frame with the person's first screenshot (or a sample) behind its screen.
+function devicePreview(d, x, height) {
+  const tid = `${d.id}/${x.id}`, pose = state.pose[tid];
+  const { src, geo } = framePreview(d.id, state.colors[d.id], x.id, pose);
+  const shot = state.shots[0];
+  const capture = (shot && imageFor(shot, x.screen, pose)?.src) || SAMPLE_PREVIEW[x.screen];
+  const box = el('div', 'pv');
+  box.style.height = `${height}px`;
+  box.style.aspectRatio = `${geo.w} / ${geo.h}`;
+  const s = geo.screen, pct = (v, of) => `${(v / of) * 100}%`;
+  const scr = el('img', 'pv-screen');
+  scr.alt = ''; scr.src = capture;
+  Object.assign(scr.style, { left: pct(s.x, geo.w), top: pct(s.y, geo.h), width: pct(s.w, geo.w), height: pct(s.h, geo.h),
+    borderRadius: `${geo.radii.map(r => pct(r, s.w)).join(' ')} / ${geo.radii.map(r => pct(r, s.h)).join(' ')}` });
+  const frame = el('img', 'pv-frame');
+  frame.alt = ''; frame.src = src;
+  box.append(scr, frame);
+  return box;
+}
+
 function renderDeviceList() {
   const list = $('deviceList');
   list.innerHTML = '';
   for (const fam of FAMILIES) {
     const models = DEVICES.filter(d => d.family === fam.id && state.available[d.id]?.length);
     if (!models.length) continue;
-    const d = models.find(m => state.devices.includes(m.id));
-    const card = el('section', 'device-card' + (d ? ' on' : ''));
-    card.dataset.family = fam.id;
-    card.innerHTML = `<label class="device-head"><span class="device-text"><span class="device-name"></span>
-      <span class="device-note"></span></span><input type="checkbox" role="switch" class="switch"></label>`;
-    const box = card.querySelector('input');
-    box.checked = !!d;
-    box.disabled = !!d && state.devices.length === 1;   // keep at least one
-    box.setAttribute('aria-label', fam.name);
-    box.onchange = () => toggleFamily(fam.id, box.checked);
-    card.querySelector('.device-name').textContent = fam.name;
-    const size = d?.displays.length === 1 ? d.displays[0].size.portrait : null;
-    card.querySelector('.device-note').textContent = !d ? fam.note : size ? `${d.note} · ${size.width} × ${size.height}` : d.note;
-    if (box.disabled) card.querySelector('.device-head').title = 'At least one device stays on';
-    if (d) card.appendChild(deviceDetails(d, models));
-    list.appendChild(card);
+    const on = models.find(m => state.devices.includes(m.id));
+    const d = on || deviceById(state.models[fam.id]) || models[0];
+    const tile = el('section', 'tile' + (on ? ' on' : ''));
+    tile.dataset.family = fam.id;
+    const pick = el('button', 'tile-select', `<span class="tile-stage"></span>
+      <span class="tile-text"><span class="tile-name"></span><span class="tile-note"></span></span><span class="tile-check">${CHECK}</span>`);
+    pick.type = 'button';
+    pick.setAttribute('role', state.licensed ? 'checkbox' : 'radio');
+    pick.setAttribute('aria-checked', String(!!on));
+    const stage = pick.querySelector('.tile-stage');
+    if (d.id === 'duo') {
+      const [inner, outer] = d.displays;
+      stage.append(devicePreview(d, inner, state.pose['duo/inner'] === 'landscape' ? 140 : 190), devicePreview(d, outer, state.pose['duo/outer'] === 'landscape' ? 100 : 140));
+    } else stage.append(devicePreview(d, d.displays[0], 196));
+    pick.querySelector('.tile-name').textContent = fam.name;
+    const size = d.displays.length === 1 ? d.displays[0].size.portrait : null;
+    pick.querySelector('.tile-note').textContent = size ? `${d.name} · ${size.width} × ${size.height}` : d.note;
+    pick.onclick = () => pickFamily(fam.id);
+    tile.appendChild(pick);
+    if (on) tile.appendChild(deviceDetails(d, models));
+    list.appendChild(tile);
   }
   const n = activeTargets().length;
-  $('deviceSummary').textContent = `${n} App Store size${n > 1 ? 's' : ''} per screenshot`;
+  $('deviceSummary').innerHTML = state.licensed
+    ? `${n} App Store size${n > 1 ? 's' : ''} per screenshot.`
+    : 'Free makes one device at a time. <button type="button" class="link-btn" id="deviceGetPro">Pro</button> makes them all at once.';
+  $('deviceGetPro')?.addEventListener('click', () => { $('deviceDialog').close(); $('licensePop').showPopover(); });
 }
 
 function deviceDetails(d, models) {
-  const box = el('div', 'device-details');
+  const box = el('div', 'tile-details');
   if (models.length > 1) {
     const chips = el('div', 'model-chips');
     chips.setAttribute('role', 'radiogroup');
@@ -707,7 +802,7 @@ function deviceDetails(d, models) {
     }
     box.appendChild(chips);
   }
-  const line = el('div', 'device-line');
+  const line = el('div', 'tile-line');
   const colors = state.available[d.id];
   const sw = el('span', 'swatches');
   sw.dataset.device = d.id;
@@ -722,26 +817,30 @@ function deviceDetails(d, models) {
   const name = el('span', 'finish-name');
   name.textContent = colors.find(c => c.id === state.colors[d.id])?.name || '';
   line.append(sw, name);
-  for (const x of d.displays) {
-    if (x.poses?.length === 1) continue;   // iPhones are always portrait
-    const tid = `${d.id}/${x.id}`;
-    const seg = el('div', 'segmented');
-    seg.dataset.pose = tid;
-    seg.setAttribute('role', 'group');
-    seg.setAttribute('aria-label', `${x.label} display orientation`);
-    for (const v of ['portrait', 'landscape']) {
-      const b = el('button', '', POSE_ICON[v]);
-      b.type = 'button'; b.dataset.v = v; b.setAttribute('aria-label', v);
-      b.title = `${x.label} display: ${v}, ${x.size[v].width} × ${x.size[v].height}`;
-      b.setAttribute('aria-pressed', String(state.pose[tid] === v));
-      b.onclick = () => { state.pose[tid] = v; syncDeviceInputs(); renderBoard({ fit: true }); };
-      seg.appendChild(b);
-    }
-    const l = el('span', 'pose-label');
-    l.textContent = x.label;
-    line.append(l, seg);
-  }
   box.appendChild(line);
+  const poses = d.displays.filter(x => !(x.poses?.length === 1));   // iPhones are always portrait
+  if (poses.length) {
+    const row = el('div', 'tile-line');
+    for (const x of poses) {
+      const tid = `${d.id}/${x.id}`;
+      const seg = el('div', 'segmented');
+      seg.dataset.pose = tid;
+      seg.setAttribute('role', 'group');
+      seg.setAttribute('aria-label', `${x.label} display orientation`);
+      for (const v of ['portrait', 'landscape']) {
+        const b = el('button', '', POSE_ICON[v]);
+        b.type = 'button'; b.dataset.v = v; b.setAttribute('aria-label', v);
+        b.title = `${x.label} display: ${v}, ${x.size[v].width} × ${x.size[v].height}`;
+        b.setAttribute('aria-pressed', String(state.pose[tid] === v));
+        b.onclick = () => { state.pose[tid] = v; syncDeviceInputs(); renderBoard({ fit: true }); };
+        seg.appendChild(b);
+      }
+      const l = el('span', 'pose-label');
+      l.textContent = x.label;
+      row.append(l, seg);
+    }
+    box.appendChild(row);
+  }
   return box;
 }
 
@@ -752,24 +851,68 @@ function setDevices(ids) {
   renderBoard({ fit: true });
 }
 
-function toggleFamily(fam, on) {
-  const others = state.devices.filter(id => DEVICES.find(d => d.id === id).family !== fam);
-  if (on) setDevices([...others, state.models[fam]]);
+const familyOf = (id) => DEVICES.find(d => d.id === id).family;
+
+// Free: picking a device replaces the current one. Pro: tiles toggle, keeping at least one on.
+function pickFamily(fam) {
+  const on = state.devices.some(id => familyOf(id) === fam);
+  if (!state.licensed) { if (!on) setDevices([state.models[fam]]); return; }
+  const others = state.devices.filter(id => familyOf(id) !== fam);
+  if (!on) setDevices([...others, state.models[fam]]);
   else if (others.length) setDevices(others);
 }
 
 function chooseModel(fam, id) {
   state.models[fam] = id;
-  toggleFamily(fam, true);
+  setDevices([...state.devices.filter(x => familyOf(x) !== fam), id]);
+}
+
+/** Free keeps one device; called when Pro goes away. */
+function limitDevicesToPlan() {
+  if (!state.licensed && state.devices.length > 1) setDevices([state.devices[0]]);
+}
+
+function openDeviceDialog(first = false) {
+  const dlg = $('deviceDialog');
+  dlg.classList.toggle('first', first);
+  $('deviceTitle').innerHTML = first ? 'What are your screenshots for?<span class="dot"></span>' : 'Devices<span class="dot">.</span>';
+  $('deviceLead').textContent = first
+    ? 'Pick a device. Every screenshot you add gets its exact App Store size, framed. You can change this any time.'
+    : 'Each device adds its App Store sizes to every screenshot.';
+  $('deviceDone').textContent = first ? 'Continue' : 'Done';
+  renderDeviceList();
+  if (!dlg.open) dlg.showModal();
+}
+
+function saveDevicePrefs() {
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ devices: state.devices, models: state.models, colors: state.colors, pose: state.pose })); } catch {}
+}
+
+function loadDevicePrefs() {
+  try { return JSON.parse(localStorage.getItem(PREFS_KEY) || 'null'); } catch { return null; }
 }
 
 function setupDevice(available) {
   state.available = available;
   for (const [id, colors] of Object.entries(available)) state.colors[id] = colors[0].id;
   for (const fam of FAMILIES) state.models[fam.id] = DEVICES.find(d => d.family === fam.id && available[d.id])?.id;
+  const prefs = loadDevicePrefs();
+  if (prefs) {   // only keep what still exists
+    for (const [fam, id] of Object.entries(prefs.models || {})) if (available[id]) state.models[fam] = id;
+    for (const [id, c] of Object.entries(prefs.colors || {})) if (available[id]?.some(x => x.id === c)) state.colors[id] = c;
+    for (const [tid, p] of Object.entries(prefs.pose || {})) if (targetById(tid) && (p === 'portrait' || p === 'landscape')) state.pose[tid] = p;
+    if (Array.isArray(prefs.devices)) state.devices = prefs.devices;
+  }
   state.devices = state.devices.filter(id => available[id]);
   if (!state.devices.length) state.devices = [Object.keys(available)[0] || 'duo'];
+  if (!storedLicenseKey()) state.devices = state.devices.slice(0, 1);
+  $('devicesBtn').onclick = () => openDeviceDialog();
+  $('deviceDone').onclick = () => $('deviceDialog').close();
+  $('deviceDialog').addEventListener('close', () => requestAnimationFrame(fitBoard));
+  $('deviceClose').onclick = () => $('deviceDialog').close();
+  $('deviceDialog').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });   // backdrop
   syncDeviceInputs();
+  return !prefs;   // first launch
 }
 
 // ---------- Translate (Pro) ----------
@@ -864,6 +1007,8 @@ function applyLicense(valid, message) {
   $('licenseBadge').classList.toggle('pro', valid);
   if (message) $('licenseStatus').textContent = message;
   syncTranslateButton();
+  limitDevicesToPlan();
+  if ($('deviceDialog').open) renderDeviceList();
   renderBoard();
 }
 
@@ -949,7 +1094,13 @@ async function exportZip() {
   const zip = new JSZip();
   const jobs = [];
   const targets = activeTargets();
-  for (const lang of state.langs) state.shots.forEach((s, i) => targets.forEach(t => jobs.push({ lang, s, i, t })));
+  let skipped = 0;
+  const count = {};   // numbered per folder, so skipped empty frames leave no gaps
+  for (const lang of state.langs) state.shots.forEach(s => targets.forEach(t => {
+    if (imageFor(s, t.display.screen, state.pose[t.id])) jobs.push({ lang, s, i: (count[lang + t.id] = (count[lang + t.id] || 0) + 1) - 1, t });
+    else if (lang === state.baseLang) skipped++;
+  }));
+  if (!jobs.length) { btn.disabled = false; return toast('Add a screenshot to a frame first.'); }
   showProgress(0, jobs.length);
   try {
     let done = 0;
@@ -970,13 +1121,14 @@ async function exportZip() {
     a.download = 'app-store-screenshots.zip';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
-    toast(`Exported ${jobs.length} screenshots${state.licensed ? '' : ' (with watermark — unlock to remove)'}.`);
+    toast(`Exported ${jobs.length} screenshots${state.licensed ? '' : ' (with watermark — unlock to remove)'}.`
+      + (skipped ? ` Skipped ${skipped} empty frame${skipped > 1 ? 's' : ''}.` : ''));
     window.__lastExport = { count: jobs.length, bytes: out.size };
   } catch (e) {
     console.error(e);
     toast('Export failed: ' + e.message);
   } finally {
-    btn.disabled = state.shots.length === 0;
+    btn.disabled = !state.shots.some(hasAnyImage);
   }
 }
 
@@ -997,6 +1149,7 @@ function showProgress(done, total) {
 
 // ---------- Boot ----------
 async function boot() {
+  const fromCheckout = new URLSearchParams(location.search).has('checkout');   // read before setupLicense tidies the address
   // Konva draws text on canvas, so fonts must be loaded before the first render.
   await Promise.all([
     'Inter:400', 'Inter:600', 'Source Serif 4:500', 'Source Sans 3:400', 'Source Sans 3:600',
@@ -1004,7 +1157,7 @@ async function boot() {
   const available = await loadFrames();
   setupInputs();
   setupInlineEditor();
-  setupDevice(available);
+  const firstLaunch = setupDevice(available);
   state.style = { ...themePatch(templateById('paper')), layout: 'top', headlineScale: 1 };
   setupBoard();
   syncToolbar();
@@ -1012,7 +1165,9 @@ async function boot() {
   setupTranslate();
   setupLicense();
   $('exportBtn').onclick = exportZip;
-  refresh();
+  refresh({ fit: true });
+  // First visit: ask what the screenshots are for (not when coming back from checkout).
+  if (firstLaunch && !fromCheckout) openDeviceDialog(true);
   window.__dss = { state, ready: true }; // used by the headless test
 }
 boot();

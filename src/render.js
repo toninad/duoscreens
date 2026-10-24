@@ -29,18 +29,6 @@ function coverCrop(img, boxW, boxH) {
   return { x: 0, y: 0, width: iw, height: iw / box };
 }
 
-function roundedClip(w, h, r) {
-  return (ctx) => {
-    ctx.beginPath();
-    ctx.moveTo(r, 0);
-    ctx.arcTo(w, 0, w, h, r);
-    ctx.arcTo(w, h, 0, h, r);
-    ctx.arcTo(0, h, 0, 0, r);
-    ctx.arcTo(0, 0, w, 0, r);
-    ctx.closePath();
-  };
-}
-
 /**
  * Where the device goes for each layout. Returns the device box and the text column.
  * Portrait canvases have no room beside the device, so "peek" layouts put the text on top and let
@@ -162,34 +150,45 @@ export function buildComposition(layer, size, p) {
   text.headline.position({ x: L.tx, y: L.ty });
   text.sub.position({ x: L.tx, y: L.ty + text.headline.height() + text.gapHS });
 
-  // Device
-  if (img) {
+  // Device. Without a screenshot yet, the screen is a grey placeholder with a plus (board only;
+  // exports skip empty screens).
+  let screen = null;
+  if (img || frame) {
     const { dx, dy, dw, dh } = L;
     const shadow = { shadowColor: '#000', shadowBlur: base * 0.05, shadowOpacity: 0.22, shadowOffsetY: base * 0.018 };
+    let sx = dx, sy = dy, sw = dw, sh = dh, radii = [1, 1, 1, 1].map(() => Math.min(dw, dh) * 0.06);
     if (frame) {
       const { geo } = frame;
       const k = dw / geo.w;
-      const sx = dx + geo.screen.x * k, sy = dy + geo.screen.y * k;
-      const sw = geo.screen.w * k, sh = geo.screen.h * k;
-      const radii = geo.radii.map(r => r * k);
+      sx = dx + geo.screen.x * k; sy = dy + geo.screen.y * k;
+      sw = geo.screen.w * k; sh = geo.screen.h * k;
+      radii = geo.radii.map(r => r * k);
       // Shadow cast by the frame image itself, so it follows the real device outline. The part that
       // falls inside the see-through screen is covered by the screenshot drawn next.
       layer.add(new Konva.Image({ image: frame.img, x: dx, y: dy, width: dw, height: dh, ...shadow }));
-      // Screenshot fills the screen opening; the frame on top covers the edges and adds the camera.
-      const bleed = 3 * k;
-      const scr = new Konva.Group({ clipFunc: roundedClip4(sx - bleed, sy - bleed, sw + bleed * 2, sh + bleed * 2, radii.map(r => r + bleed)) });
-      scr.add(new Konva.Rect({ x: sx - bleed, y: sy - bleed, width: sw + bleed * 2, height: sh + bleed * 2, fill: '#000' }));
-      scr.add(new Konva.Image({ image: img, x: sx - bleed, y: sy - bleed, width: sw + bleed * 2, height: sh + bleed * 2, crop: coverCrop(img, sw, sh) }));
-      layer.add(scr);
-      layer.add(new Konva.Image({ image: frame.img, x: dx, y: dy, width: dw, height: dh }));
     } else {
-      // No frame available: a rounded screen.
-      const r = Math.min(dw, dh) * 0.06;
-      layer.add(new Konva.Rect({ x: dx, y: dy, width: dw, height: dh, cornerRadius: r, fill: '#000', ...shadow }));
-      const grp = new Konva.Group({ x: dx, y: dy, clipFunc: roundedClip(dw, dh, r) });
-      grp.add(new Konva.Image({ image: img, width: dw, height: dh, crop: coverCrop(img, dw, dh) }));
-      layer.add(grp);
+      layer.add(new Konva.Rect({ x: dx, y: dy, width: dw, height: dh, cornerRadius: radii[0], fill: '#000', ...shadow }));
     }
+    // The screenshot fills the screen opening; the frame on top covers the edges and adds the camera.
+    const bleed = frame ? 3 * (dw / frame.geo.w) : 0;
+    const bx = sx - bleed, by = sy - bleed, bw = sw + bleed * 2, bh = sh + bleed * 2;
+    const scr = new Konva.Group({ clipFunc: roundedClip4(bx, by, bw, bh, radii.map(r => r + bleed)) });
+    if (img) {
+      scr.add(new Konva.Rect({ x: bx, y: by, width: bw, height: bh, fill: '#000' }));
+      scr.add(new Konva.Image({ image: img, x: bx, y: by, width: bw, height: bh, crop: coverCrop(img, sw, sh) }));
+    } else {
+      const m = Math.min(sw, sh);
+      scr.add(new Konva.Rect({ x: bx, y: by, width: bw, height: bh, fill: '#d9d5d1' }));
+      const arm = m * 0.075, bar = Math.max(2, m * 0.012), cx = sx + sw / 2, cy = sy + sh / 2 - m * 0.04;
+      scr.add(new Konva.Rect({ x: cx - arm, y: cy - bar / 2, width: arm * 2, height: bar, cornerRadius: bar / 2, fill: '#8c8681' }));
+      scr.add(new Konva.Rect({ x: cx - bar / 2, y: cy - arm, width: bar, height: arm * 2, cornerRadius: bar / 2, fill: '#8c8681' }));
+      const label = new Konva.Text({ text: 'Add screenshot', fontFamily: 'Inter', fontStyle: '600', fontSize: m * 0.05, fill: '#8c8681', width: sw, align: 'center' });
+      label.position({ x: sx, y: cy + arm + m * 0.045 });
+      scr.add(label);
+    }
+    layer.add(scr);
+    if (frame) layer.add(new Konva.Image({ image: frame.img, x: dx, y: dy, width: dw, height: dh }));
+    screen = { x: sx, y: sy, width: sw, height: sh, empty: !img };
   }
 
   // Text on top of the device, so bleed layouts never hide the headline. Both nodes are always on
@@ -210,5 +209,5 @@ export function buildComposition(layer, size, p) {
     layer.add(label);
   }
   layer.batchDraw();
-  return { headline: text.headline, subheadline: text.sub };
+  return { headline: text.headline, subheadline: text.sub, screen };
 }

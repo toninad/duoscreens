@@ -125,3 +125,12 @@ export function getFrame(deviceId, colorId, displayId, pose) {
   const img = images.get(phoneFile(deviceId, color));
   return img ? { img, geo: device.geometry } : null;
 }
+
+/** File and geometry of a frame, for HTML previews (the device picker). */
+export function framePreview(deviceId, colorId, displayId, pose) {
+  const device = deviceById(deviceId);
+  const color = colorId || device.colors[0].id;
+  return deviceId === 'duo'
+    ? { src: duoFile(color, displayId, pose), geo: DUO_GEOMETRY[displayId][pose] }
+    : { src: phoneFile(deviceId, color), geo: device.geometry };
+}

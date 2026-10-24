@@ -80,6 +80,16 @@ try {
   await page.waitForFunction(() => window.__dss?.ready === true, null, { timeout: 15_000 });
   check(true, 'App loaded');
 
+  // First launch: pick a device first. Free picks one at a time: choosing iPhone replaces the Duo.
+  await page.waitForSelector('#deviceDialog[open]');
+  check(true, 'First launch opens the device picker');
+  await page.click('.tile[data-family="iphone"] .tile-select');
+  check(await page.evaluate(() => window.__dss.state.devices.join()) === 'iphone-18-pro-max', 'Free: picking iPhone replaces the Duo');
+  await page.click('.tile[data-family="duo"] .tile-select');
+  check(await page.evaluate(() => window.__dss.state.devices.join()) === 'duo', 'Free: one device at a time');
+  await page.click('#deviceDone');
+  check(await page.$$eval('.shot-card .screen-add', bs => bs.length) === 2, 'The board starts with an empty card: an "add screenshot" screen per frame');
+
   // Make a sample screenshot file using the app's own generator and save it as a fixture.
   const b64 = await page.evaluate(async () => {
     const { makeSampleScreenshot } = await import('/src/sample.js');
@@ -90,10 +100,19 @@ try {
   const fixture = path.join(here, 'fixtures', 'sample-screenshot.png');
   await fs.writeFile(fixture, Buffer.from(b64, 'base64'));
 
-  // Upload two screenshots through the real file input.
+  // Every screen takes its own capture. Bulk-added captures go to the screen whose shape they match:
+  // the generated sample (2007 × 2853) to the inner display, the cover capture to the outer.
   await page.setInputFiles('#fileInput', [fixture, fixture]);
   await page.waitForFunction(() => window.__dss.state.shots.length === 2);
-  check(true, 'Uploaded 2 screenshots via file input');
+  check(await page.evaluate(() => window.__dss.state.shots.every(s => Object.keys(s.images).join() === 'duo/inner')), 'Inner-shaped captures fill the inner display of each card');
+  const cover = path.join(root, 'samples', 'outer-portrait-home.webp');
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('.shot-card:first-child .frame[data-display="outer"] .screen-add')]);
+  await chooser.setFiles(cover);
+  await page.waitForFunction(() => window.__dss.state.shots[0].images['duo/outer']);
+  check(true, 'Clicking an empty screen adds a capture to just that frame');
+  await page.setInputFiles('#fileInput', [cover]);
+  await page.waitForFunction(() => window.__dss.state.shots[1].images['duo/outer']);
+  check(await page.$$eval('.shot-card .screen-add', bs => bs.length) === 0, 'Uploaded captures for both displays of 2 screenshots');
 
   // Edit headline of screenshot 1
   // Edit text inline: click the headline on the inner preview, type, then Tab to the subheadline.
@@ -192,7 +211,7 @@ try {
 
   // iPhone: tick it, then pick one model. Its size joins the Duo's on every screenshot, in every language.
   await page.click('#devicesBtn');
-  await page.click('.device-card[data-family="iphone"] .device-head');
+  await page.click('.tile[data-family="iphone"] .tile-select');
   check(await page.getAttribute('[data-model="iphone-18-pro-max"]', 'aria-checked') === 'true', 'iPhone starts on the 18 Pro Max');
   await page.click('[data-model="iphone-air"]');
   await page.click('.swatches[data-device="iphone-air"] [data-color="sky-blue"]');
@@ -201,6 +220,13 @@ try {
   check(await page.evaluate(() => window.__dss.state.devices.join()) === 'duo,iphone-air', 'One iPhone model at a time');
   check(!(await page.$('.segmented[data-pose="iphone-air/main"]')), 'iPhones have no orientation choice: always portrait');
   check(await page.$$eval('.lang-row[data-lang="en"] .shot-card:first-child .frame', fs => fs.length) === 3, 'A card shows a frame per App Store size');
+  const half = await exportZip(page, 'devices-half');
+  check(Object.keys(half.zip.files).filter(n => n.endsWith('.png')).length === 12, 'Empty iPhone screens are left out of the export');
+  for (const n of [1, 2]) {
+    const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click(`.lang-row[data-lang="en"] .shot-card:nth-child(${n}) .frame[data-target="iphone-air/main"] .screen-add`)]);
+    await fc.setFiles(fixture);
+  }
+  await page.waitForFunction(() => window.__dss.state.shots.every(s => s.images.iphone));
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(out, 'devices.png') });
   const all = await exportZip(page, 'devices');

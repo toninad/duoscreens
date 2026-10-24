@@ -461,41 +461,104 @@ details[open] summary { margin-bottom: 12px; }
 @media (max-width: 380px) { .brand-title { display: none; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
-/* Devices popover: a grouped list like iOS Settings; a switch per device, its details right below */
-.device-pop { width: 360px; }
-.device-pop-head { padding: 16px 18px 10px; }
-.device-pop-head .pop-title { margin: 0; }
-.device-pop-head .hint { margin: 2px 0 0; }
-.device-card + .device-card { border-top: .5px solid var(--hairline); }
-.device-head { display: flex; align-items: center; gap: 12px; padding: 12px 18px; cursor: pointer; }
-.device-head:has(input:disabled) { cursor: default; }
-.device-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-.device-name { font-weight: 600; }
-.device-note { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.switch {
-  appearance: none; -webkit-appearance: none; flex: none; margin: 0; width: 42px; height: 26px; border-radius: 999px;
-  background: color-mix(in srgb, var(--ink) 14%, transparent); position: relative; cursor: inherit; transition: background .2s var(--ease);
+/* Devices dialog: centred, a tile per kind of device with its real frame; opens on first launch too */
+.device-dialog {
+  width: min(780px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 0; border-radius: 26px;
+  background: var(--card); color: var(--ink); overflow: auto;
+  box-shadow: 0 40px 100px -24px rgba(0,0,0,.5), 0 0 0 .5px var(--hairline);
 }
-.switch::after {
-  content: ''; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s var(--ease);
+.device-dialog[open] { animation: rise .45s var(--ease); }
+.device-dialog:focus { outline: none; }
+.device-dialog::backdrop { background: color-mix(in srgb, var(--paper) 55%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.dd-head { position: relative; padding: 34px 40px 8px; text-align: center; }
+.dd-head h2 { font: 500 32px/1.1 var(--serif); letter-spacing: -0.02em; text-transform: none; color: var(--ink); margin: 0 0 8px; }
+.dd-head h2 .dot { color: var(--orange); }
+.dd-head p { margin: 0 auto; max-width: 440px; color: var(--muted); line-height: 1.45; }
+.dd-close {
+  position: absolute; top: 16px; right: 16px; width: 32px; height: 32px; border: 0; border-radius: 50%; display: grid; place-items: center;
+  background: var(--fill); color: var(--muted); cursor: pointer;
 }
-.switch:checked { background: var(--orange); }
-.switch:checked::after { transform: translateX(16px); }
-.switch:disabled { opacity: .55; }
-.switch:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
-.device-details { display: flex; flex-direction: column; gap: 12px; padding: 0 18px 14px; }
-.device-line { display: flex; align-items: center; gap: 8px; min-height: 30px; }
-.finish-name { font-size: 13px; color: var(--muted); margin-right: auto; padding-left: 2px; }
-.pose-label { font-size: 12.5px; color: var(--muted); margin-left: 4px; }
-.model-chips { display: flex; padding: 2px; border-radius: 999px; background: var(--fill); }
+.dd-close:hover { color: var(--ink); }
+.dd-close svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.device-dialog.first .dd-close { display: none; }
+.dd-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; padding: 24px 32px 8px; align-items: start; }
+
+.tile { border-radius: 20px; background: var(--fill); transition: background .25s, box-shadow .25s; }
+.tile.on { background: var(--raised); box-shadow: 0 0 0 1.5px var(--ink), 0 14px 34px -18px rgba(0,0,0,.35); }
+.tile-select {
+  display: flex; flex-direction: column; width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit;
+  text-align: left; cursor: pointer; border-radius: 20px; position: relative;
+}
+.tile-select:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+.tile-stage {
+  height: 236px; display: flex; align-items: center; justify-content: center; gap: 14px; margin: 8px 8px 0; border-radius: 14px;
+  background: radial-gradient(90% 90% at 50% 15%, color-mix(in srgb, #fff 55%, var(--paper)), var(--paper));
+  transition: opacity .25s;
+}
+.tile:not(.on) .tile-stage { opacity: .72; }
+.tile-select:hover .tile-stage { opacity: 1; }
+.pv { position: relative; flex: none; filter: drop-shadow(0 14px 18px rgba(0,0,0,.18)); transition: transform .35s var(--ease); }
+.tile-select:hover .pv { transform: translateY(-3px); }
+.pv-screen { position: absolute; object-fit: cover; object-position: top; background: #000; }
+.pv-frame { position: absolute; inset: 0; width: 100%; height: 100%; }
+.tile-text { display: flex; flex-direction: column; gap: 2px; padding: 14px 52px 14px 18px; }
+.tile-name { font-weight: 600; font-size: 16px; }
+.tile-note { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.tile-check {
+  position: absolute; right: 16px; bottom: 20px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 22%, transparent); transition: background .2s, box-shadow .2s;
+}
+.tile-check svg { width: 14px; height: 14px; fill: none; stroke: var(--card); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+.tile.on .tile-check { background: var(--ink); box-shadow: none; }
+.tile.on .tile-check svg { opacity: 1; }
+.tile-details { display: flex; flex-direction: column; gap: 12px; padding: 0 18px 18px; }
+.tile-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.finish-name { font-size: 13px; color: var(--muted); padding-left: 4px; }
+.pose-label { font-size: 13px; color: var(--muted); }
+.pose-label:not(:first-child) { margin-left: auto; }
+.swatches button { width: 26px; height: 26px; }
+.model-chips { display: flex; padding: 3px; border-radius: 999px; background: var(--fill); }
 .model-chips button {
-  flex: 1; height: 28px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--muted);
-  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .2s, color .2s;
+  flex: 1; height: 32px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--muted);
+  font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .2s, color .2s;
 }
 .model-chips button:hover { color: var(--ink); }
-.model-chips button[aria-checked=true] { background: var(--raised); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 0 0 .5px rgba(0,0,0,.04); }
-.device-summary { margin: 0; padding: 10px 18px 14px; border-top: .5px solid var(--hairline); font-size: 12px; color: var(--muted); }
+.model-chips button[aria-checked=true] { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 0 0 .5px rgba(0,0,0,.04); }
+.dd-foot {
+  position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 32px 28px;
+  background: linear-gradient(transparent, var(--card) 22%);
+}
+.dd-foot p { margin: 0; color: var(--muted); font-size: 13px; }
+.dd-foot .link-btn { font: inherit; color: var(--ink); font-weight: 600; }
+.dd-foot .btn.primary { padding: 11px 26px; font-size: 15px; flex: none; }
+@media (prefers-color-scheme: dark) {
+  .tile-stage { background: radial-gradient(90% 90% at 50% 15%, #2a2725, var(--paper)); }
+  .tile.on { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--ink) 70%, transparent), 0 14px 34px -18px rgba(0,0,0,.6); }
+}
+@media (max-width: 640px) {
+  .dd-head { padding: 28px 22px 4px; }
+  .dd-head h2 { font-size: 26px; }
+  .dd-tiles { padding: 18px 16px 4px; gap: 12px; }
+  .tile-stage { height: 176px; }
+  .tile:not(.on) .tile-stage { height: 112px; }
+  .tile:not(.on) .pv { height: 96px !important; }
+  .dd-foot { padding: 14px 16px 20px; flex-direction: column; align-items: stretch; text-align: center; }
+}
 @media (prefers-color-scheme: dark) {
   .model-chips button[aria-checked=true], .segmented button[aria-pressed=true] { background: color-mix(in srgb, var(--ink) 18%, transparent); }
 }
+
+/* Empty screens: the whole screen is a button to add that device's capture; frames take drops too */
+.screen-add { pointer-events: auto; position: absolute; border: 0; padding: 0; background: transparent; cursor: pointer; border-radius: 6px; transition: background .2s; }
+.screen-add:hover { background: rgba(0,0,0,.06); }
+.screen-add:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+.frame.drop { outline: 2px dashed var(--orange); outline-offset: 4px; }
+.board-link { border: 0; background: none; padding: 6px 4px; font: inherit; font-size: 14px; color: var(--ink); cursor: pointer; text-decoration: underline; text-decoration-color: var(--hairline); text-underline-offset: 3px; }
+.board-link:hover { text-decoration-color: var(--orange); }
+.add-card {
+  align-self: flex-end; margin-bottom: 22px; width: 150px; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  border: 1.5px dashed color-mix(in srgb, var(--ink) 18%, transparent); border-radius: 14px; background: transparent; color: var(--muted);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: border-color .2s, color .2s, background .2s;
+}
+.add-card:hover { border-color: var(--orange); color: var(--ink); background: color-mix(in srgb, var(--card) 50%, transparent); }
+.add-card svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
