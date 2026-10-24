@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Duo Screenshot Studio — App Store screenshots for iPhone Duo</title>
+  <meta name="description" content="Turn your app screenshots into App Store-ready iPhone Duo screenshots for the inner and outer display. Runs in your browser; images never leave your device.">
+  <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"><i></i><i></i></span>
+      <div>
+        <strong>Duo Screenshot Studio</strong>
+        <small>App Store screenshots for iPhone Duo · images never leave your device</small>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <span id="licenseBadge" class="badge">Free · watermark</span>
+      <button id="exportBtn" class="btn primary" disabled>Export ZIP</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel left">
+      <label id="dropzone" class="dropzone" tabindex="0">
+        <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+        <span class="dz-icon">＋</span>
+        <span><strong>Drop screenshots</strong><br><small>or click to choose · PNG / JPEG</small></span>
+      </label>
+      <button id="sampleBtn" class="btn ghost small">Try with a sample screenshot</button>
+      <ol id="shotList" class="shot-list" aria-label="Screenshots"></ol>
+    </aside>
+
+    <section class="stage-wrap">
+      <div id="empty" class="empty">
+        <h1>Make your app Duo-ready</h1>
+        <p>Drop your screenshots on the left. You'll get one image for the <b>inner (unfolded)</b> display and one for the <b>outer (cover)</b> display, at the exact sizes App Store Connect asks for.</p>
+      </div>
+      <div id="previews" class="previews" hidden>
+        <figure>
+          <div id="stageInner" class="stage"></div>
+          <figcaption>Inner display · <span id="innerSize"></span></figcaption>
+        </figure>
+        <figure>
+          <div id="stageOuter" class="stage"></div>
+          <figcaption>Outer display · <span id="outerSize"></span></figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <aside class="panel right">
+      <section>
+        <h2>Template</h2>
+        <div id="templateGrid" class="template-grid"></div>
+      </section>
+
+      <section>
+        <h2>Text <span class="muted" id="textFor"></span></h2>
+        <label class="field">Language
+          <select id="langSelect"></select>
+        </label>
+        <label class="field">Headline
+          <textarea id="headline" rows="2" placeholder="Your best feature, in 3–6 words"></textarea>
+        </label>
+        <label class="field">Subheadline
+          <textarea id="subheadline" rows="2" placeholder="One line that explains it"></textarea>
+        </label>
+        <label class="field">Text size
+          <input id="headlineScale" type="range" min="0.7" max="1.4" step="0.05" value="1">
+        </label>
+        <label class="field">Outer display image <small class="muted">(optional, otherwise the same screenshot)</small>
+          <input id="outerFile" type="file" accept="image/png,image/jpeg,image/webp">
+        </label>
+      </section>
+
+      <section>
+        <h2>Style</h2>
+        <div class="row">
+          <label class="field color">Background<input id="bg1" type="color"></label>
+          <label class="field color">Gradient<input id="bg2" type="color"></label>
+          <label class="field color">Text<input id="textColor" type="color"></label>
+        </div>
+        <label class="field">Font <select id="fontSelect"></select></label>
+      </section>
+
+      <section>
+        <h2>Translate headlines</h2>
+        <div class="row">
+          <select id="translateTarget"></select>
+          <button id="translateBtn" class="btn small">Translate</button>
+        </div>
+        <p id="translateStatus" class="hint"></p>
+      </section>
+
+      <section>
+        <h2>License</h2>
+        <div class="row">
+          <input id="licenseKey" type="text" placeholder="Lemon Squeezy license key" autocomplete="off" spellcheck="false">
+          <button id="licenseBtn" class="btn small">Unlock</button>
+        </div>
+        <p id="licenseStatus" class="hint">Free exports include a small watermark. <a id="buyLink" href="#">Get a license</a> — €19 per app or €49 lifetime.</p>
+      </section>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="vendor/konva.min.js"></script>
+  <script src="vendor/jszip.min.js"></script>
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
