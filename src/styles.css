@@ -469,3 +469,9 @@ details[open] summary { margin-bottom: 12px; }
 .device-head .muted { margin-left: auto; font-size: 13px; }
 .device-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 2px 26px; }
 .device-opts .finish-name { margin-right: auto; }
+.model-chips { display: inline-flex; gap: 2px; padding: 2px; margin: 10px 0 0 26px; border-radius: 999px; background: var(--fill); }
+.model-chips button {
+  height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: var(--muted);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.model-chips button[aria-checked=true] { background: var(--raised); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 0 0 .5px rgba(0,0,0,.04); }

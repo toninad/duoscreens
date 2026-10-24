@@ -190,16 +190,20 @@ try {
   const landPngs = await verifyZip(land.zip, 'landscape', 12);
   check(landPngs.every(n => n.includes('2853x2007') || n.includes('2034x1398')), 'Landscape export uses 2853×2007 and 2034×1398');
 
-  // More devices: every iPhone adds its own size to every screenshot, in every language.
+  // iPhone: tick it, then pick one model. Its size joins the Duo's on every screenshot, in every language.
   await page.click('#devicesBtn');
-  for (const d of ['iphone-18-pro-max', 'iphone-air', 'iphone-18-pro']) await page.check(`.device-row[data-device="${d}"] input`);
+  await page.check('.device-row[data-family="iphone"] input');
+  check(await page.getAttribute('[data-model="iphone-18-pro-max"]', 'aria-checked') === 'true', 'iPhone starts on the 18 Pro Max');
+  await page.click('[data-model="iphone-air"]');
   await page.click('.swatches[data-device="iphone-air"] [data-color="sky-blue"]');
+  await page.screenshot({ path: path.join(out, 'device-picker.png') });
   await page.keyboard.press('Escape');
-  check(await page.$$eval('.lang-row[data-lang="en"] .shot-card:first-child .frame', fs => fs.length) === 5, 'A card shows a frame per App Store size');
+  check(await page.evaluate(() => window.__dss.state.devices.join()) === 'duo,iphone-air', 'One iPhone model at a time');
+  check(await page.$$eval('.lang-row[data-lang="en"] .shot-card:first-child .frame', fs => fs.length) === 3, 'A card shows a frame per App Store size');
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(out, 'devices.png') });
   const all = await exportZip(page, 'devices');
-  const allPngs = await verifyZip(all.zip, 'devices', 30);
+  const allPngs = await verifyZip(all.zip, 'devices', 18);
   const air = allPngs.find(n => n.startsWith('en/iPhone-Air-1260x2736/01'));
   check(!!air, 'iPhone Air export is 1260×2736');
   if (air) await fs.writeFile(path.join(out, 'iphone-air-01.png'), await all.zip.file(air).async('nodebuffer'));

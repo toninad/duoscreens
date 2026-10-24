@@ -1,6 +1,6 @@
 /* global Konva, JSZip */
 import { PRO, WATERMARK_TEXT, LANGUAGES } from './config.js';
-import { DEVICES, TARGETS, SCREENS, targetById, deviceById, loadFrames, getFrame } from './devices.js';
+import { FAMILIES, DEVICES, TARGETS, SCREENS, targetById, loadFrames, getFrame } from './devices.js';
 import { TEMPLATES, LAYOUTS, FONTS, templateById } from './templates.js';
 import { buildComposition } from './render.js';
 import { canvasToRgbPng } from './png.js';
@@ -23,7 +23,8 @@ const state = {
   langs: ['en'],
   style: null,
   licensed: false,
-  devices: ['duo'],     // devices to make screenshots for, in board order
+  devices: ['duo'],     // devices to make screenshots for, in board order; at most one per family
+  models: {},           // family id -> the model last picked, so ticking iPhone again brings it back
   pose: Object.fromEntries(TARGETS.map(t => [t.id, 'portrait'])),   // App Store Connect takes either orientation per size
   colors: {},           // device id -> finish id
   available: {},        // device id -> finishes that have frame files
@@ -656,74 +657,106 @@ const POSE_ICON = {
 
 function syncDeviceInputs() {
   const on = DEVICES.filter(d => state.devices.includes(d.id));
-  $('devicesLabel').textContent = on.length === 1 ? on[0].name : `${on[0].name} + ${on.length - 1}`;
+  $('devicesLabel').textContent = on.map(d => d.name).join(' + ');
   renderDeviceList();
 }
 
+// A row per kind of device. Ticking one shows its details: the model (iPhone), finish and orientation.
 function renderDeviceList() {
   const list = $('deviceList');
   list.innerHTML = '';
-  for (const d of DEVICES) {
-    const colors = state.available[d.id];
-    if (!colors?.length) continue;
-    const on = state.devices.includes(d.id);
-    const row = el('div', 'device-row' + (on ? ' on' : ''));
-    row.dataset.device = d.id;
+  for (const fam of FAMILIES) {
+    const models = DEVICES.filter(d => d.family === fam.id && state.available[d.id]?.length);
+    if (!models.length) continue;
+    const d = models.find(m => state.devices.includes(m.id));
+    const row = el('div', 'device-row' + (d ? ' on' : ''));
+    row.dataset.family = fam.id;
     row.innerHTML = '<label class="device-head"><input type="checkbox"><span class="device-name"></span><span class="muted"></span></label>';
     const box = row.querySelector('input');
-    box.checked = on;
-    box.disabled = on && state.devices.length === 1;   // keep at least one
-    box.onchange = () => toggleDevice(d.id, box.checked);
-    row.querySelector('.device-name').textContent = d.name;
-    row.querySelector('.muted').textContent = d.note;
-    if (on) {
-      const opts = el('div', 'device-opts');
-      const sw = el('span', 'swatches');
-      sw.dataset.device = d.id;
-      for (const c of colors) {
-        const b = el('button');
-        b.type = 'button'; b.dataset.color = c.id; b.title = c.name; b.setAttribute('aria-label', c.name);
-        b.setAttribute('aria-pressed', String(state.colors[d.id] === c.id));
-        b.style.setProperty('--swatch', c.swatch);
-        b.onclick = () => { state.colors[d.id] = c.id; syncDeviceInputs(); renderBoard(); };
-        sw.appendChild(b);
-      }
-      const name = el('span', 'dock-label finish-name');
-      name.textContent = colors.find(c => c.id === state.colors[d.id])?.name || '';
-      opts.append(sw, name);
-      for (const x of d.displays) {
-        const tid = `${d.id}/${x.id}`;
-        const seg = el('div', 'segmented');
-        seg.dataset.pose = tid;
-        seg.setAttribute('role', 'group');
-        seg.setAttribute('aria-label', `${d.name} ${x.label} orientation`.replace(/\s+/g, ' '));
-        for (const v of ['portrait', 'landscape']) {
-          const b = el('button', '', POSE_ICON[v]);
-          b.type = 'button'; b.dataset.v = v; b.title = `${x.label || d.name}: ${v}`; b.setAttribute('aria-label', v);
-          b.setAttribute('aria-pressed', String(state.pose[tid] === v));
-          b.onclick = () => { state.pose[tid] = v; syncDeviceInputs(); renderBoard({ fit: true }); };
-          seg.appendChild(b);
+    box.checked = !!d;
+    box.disabled = !!d && state.devices.length === 1;   // keep at least one
+    box.onchange = () => toggleFamily(fam.id, box.checked);
+    row.querySelector('.device-name').textContent = fam.name;
+    row.querySelector('.muted').textContent = d && models.length > 1 ? d.note : fam.note;
+    if (d) {
+      if (models.length > 1) {
+        const chips = el('div', 'model-chips');
+        chips.setAttribute('role', 'radiogroup');
+        chips.setAttribute('aria-label', `${fam.name} model`);
+        for (const m of models) {
+          const b = el('button');
+          b.type = 'button'; b.dataset.model = m.id; b.textContent = m.short;
+          b.setAttribute('role', 'radio');
+          b.setAttribute('aria-checked', String(m.id === d.id));
+          b.title = `${m.name} · ${m.note} · ${m.displays[0].size.portrait.width} × ${m.displays[0].size.portrait.height}`;
+          b.onclick = () => chooseModel(fam.id, m.id);
+          chips.appendChild(b);
         }
-        if (x.label) { const l = el('span', 'dock-label'); l.textContent = x.label; opts.appendChild(l); }
-        opts.appendChild(seg);
+        row.appendChild(chips);
       }
-      row.appendChild(opts);
+      row.appendChild(deviceOptions(d));
     }
     list.appendChild(row);
   }
 }
 
-function toggleDevice(id, on) {
-  if (on && !state.devices.includes(id)) state.devices = DEVICES.map(d => d.id).filter(d => d === id || state.devices.includes(d));
-  if (!on && state.devices.length > 1) state.devices = state.devices.filter(d => d !== id);
+function deviceOptions(d) {
+  const colors = state.available[d.id];
+  const opts = el('div', 'device-opts');
+  const sw = el('span', 'swatches');
+  sw.dataset.device = d.id;
+  for (const c of colors) {
+    const b = el('button');
+    b.type = 'button'; b.dataset.color = c.id; b.title = c.name; b.setAttribute('aria-label', c.name);
+    b.setAttribute('aria-pressed', String(state.colors[d.id] === c.id));
+    b.style.setProperty('--swatch', c.swatch);
+    b.onclick = () => { state.colors[d.id] = c.id; syncDeviceInputs(); renderBoard(); };
+    sw.appendChild(b);
+  }
+  const name = el('span', 'dock-label finish-name');
+  name.textContent = colors.find(c => c.id === state.colors[d.id])?.name || '';
+  opts.append(sw, name);
+  for (const x of d.displays) {
+    const tid = `${d.id}/${x.id}`;
+    const seg = el('div', 'segmented');
+    seg.dataset.pose = tid;
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', `${d.name} ${x.label} orientation`.replace(/\s+/g, ' '));
+    for (const v of ['portrait', 'landscape']) {
+      const b = el('button', '', POSE_ICON[v]);
+      b.type = 'button'; b.dataset.v = v; b.title = `${x.label || d.name}: ${v}`; b.setAttribute('aria-label', v);
+      b.setAttribute('aria-pressed', String(state.pose[tid] === v));
+      b.onclick = () => { state.pose[tid] = v; syncDeviceInputs(); renderBoard({ fit: true }); };
+      seg.appendChild(b);
+    }
+    if (x.label) { const l = el('span', 'dock-label'); l.textContent = x.label; opts.appendChild(l); }
+    opts.appendChild(seg);
+  }
+  return opts;
+}
+
+function setDevices(ids) {
+  state.devices = DEVICES.map(d => d.id).filter(id => ids.includes(id));
   syncDeviceInputs();
   syncToolbar();
   renderBoard({ fit: true });
 }
 
+function toggleFamily(fam, on) {
+  const others = state.devices.filter(id => DEVICES.find(d => d.id === id).family !== fam);
+  if (on) setDevices([...others, state.models[fam]]);
+  else if (others.length) setDevices(others);
+}
+
+function chooseModel(fam, id) {
+  state.models[fam] = id;
+  toggleFamily(fam, true);
+}
+
 function setupDevice(available) {
   state.available = available;
   for (const [id, colors] of Object.entries(available)) state.colors[id] = colors[0].id;
+  for (const fam of FAMILIES) state.models[fam.id] = DEVICES.find(d => d.family === fam.id && available[d.id])?.id;
   state.devices = state.devices.filter(id => available[id]);
   if (!state.devices.length) state.devices = [Object.keys(available)[0] || 'duo'];
   syncDeviceInputs();

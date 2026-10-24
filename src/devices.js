@@ -16,9 +16,15 @@ export const SCREENS = {
   iphone: 'iPhone',
 };
 
+// What people pick first: a kind of device, then (for iPhone) one model.
+export const FAMILIES = [
+  { id: 'duo', name: 'iPhone Duo', note: 'Inner and outer display' },
+  { id: 'iphone', name: 'iPhone', note: 'One model per export' },
+];
+
 export const DEVICES = [
   {
-    id: 'duo', name: 'iPhone Duo', note: 'Inner and outer display',
+    id: 'duo', family: 'duo', name: 'iPhone Duo', short: 'Duo', note: 'Inner and outer display',
     displays: [
       { id: 'inner', label: 'Inner', size: sizes(2007, 2853), screen: 'duo/inner' },
       { id: 'outer', label: 'Outer', size: sizes(1398, 2034), screen: 'duo/outer' },
@@ -29,7 +35,7 @@ export const DEVICES = [
     ],
   },
   {
-    id: 'iphone-18-pro-max', name: 'iPhone 18 Pro Max', note: '6.9″ display',
+    id: 'iphone-18-pro-max', family: 'iphone', name: 'iPhone 18 Pro Max', short: '18 Pro Max', note: '6.9″ display',
     displays: [{ id: 'main', label: '', size: sizes(1320, 2868), screen: 'iphone' }],
     geometry: { w: 1176, h: 2400, screen: { x: 60, y: 53, w: 1056, h: 2294 }, radii: [150, 150, 150, 150] },
     colors: [
@@ -40,7 +46,7 @@ export const DEVICES = [
     ],
   },
   {
-    id: 'iphone-air', name: 'iPhone Air', note: '6.9″ display',
+    id: 'iphone-air', family: 'iphone', name: 'iPhone Air', short: 'Air', note: '6.9″ display',
     displays: [{ id: 'main', label: '', size: sizes(1260, 2736), screen: 'iphone' }],
     geometry: { w: 1150, h: 2400, screen: { x: 50, y: 60, w: 1050, h: 2280 }, radii: [157, 157, 157, 157] },
     colors: [
@@ -51,7 +57,7 @@ export const DEVICES = [
     ],
   },
   {
-    id: 'iphone-18-pro', name: 'iPhone 18 Pro', note: '6.3″ display',
+    id: 'iphone-18-pro', family: 'iphone', name: 'iPhone 18 Pro', short: '18 Pro', note: '6.3″ display',
     displays: [{ id: 'main', label: '', size: sizes(1206, 2622), screen: 'iphone' }],
     geometry: { w: 1174, h: 2400, screen: { x: 63, y: 60, w: 1048, h: 2280 }, radii: [160, 160, 160, 160] },
     colors: [
