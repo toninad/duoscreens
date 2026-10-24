@@ -649,8 +649,25 @@ details[open] summary { margin-bottom: 12px; }
 .group .frame-cap .card-num { font-size: 11px; }
 .group .shot-card.selected .frame-cap .card-num { color: var(--orange); }
 .group .card-tools {
-  position: absolute; top: 8px; right: 8px; z-index: 3; margin: 0; zoom: var(--ui, 1); opacity: 0; pointer-events: none;
+  position: absolute; bottom: calc(100% + 6px); right: 0; top: auto; z-index: 3; margin: 0; zoom: var(--ui, 1); opacity: 0; pointer-events: none;
   padding: 2px; border-radius: 999px; background: var(--raised); box-shadow: 0 0 0 .5px var(--hairline), 0 6px 16px -8px rgba(0,0,0,.3);
 }
 .group .shot-card:hover .card-tools, .group .shot-card.selected .card-tools { opacity: 1; pointer-events: auto; }
 .group .card-tools button { width: 26px; height: 26px; }
+
+/* Groups as canvas sections (like Figma section names): no panel, just a one-line label above the
+   cards; its controls stay small and quiet until you hover the group. */
+.group { padding: 0; border-radius: 0; background: none; box-shadow: none; gap: 14px; }
+.group-head { justify-content: flex-start; align-items: center; gap: 14px; padding: 0 0 0 2px; border-bottom: 0; flex-wrap: nowrap; }
+.group-title { flex-direction: row; align-items: baseline; gap: 10px; }
+.group-title h2 { font: 600 15px/1.2 var(--sans); letter-spacing: 0; }
+.group-count { font-size: 12.5px; }
+.group-tools { gap: 6px; opacity: .55; transition: opacity .2s; }
+.group:hover .group-tools, .group-tools:focus-within { opacity: 1; }
+.group-tools .swatches { margin-right: 2px; gap: 5px; }
+.group-tools .swatches button { width: 14px; height: 14px; }
+.group-btn { height: 24px; padding: 0 10px; font-size: 12px; background: transparent; color: var(--muted); }
+.group-btn:hover { background: var(--fill); color: var(--ink); }
+.group-btn.icon { width: 24px; }
+.board-world { gap: 56px; }
+.add-group { height: 34px; font-size: 13px; padding: 0 14px 0 10px; border-width: 1px; }
