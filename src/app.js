@@ -861,11 +861,14 @@ const SCREEN_ICON = {
 };
 const CHECK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8.5l2.6 2.5L12 5.5"/></svg>';
 const SKETCH = {
-  duo: `<svg viewBox="0 0 220 120" aria-hidden="true">
-    <rect x="8" y="16" width="128" height="90" rx="13"/><path d="M72 18v86" class="faint"/>
-    <path d="M158 16h40a14 14 0 0 1 14 14v62a14 14 0 0 1-14 14h-40a2 2 0 0 1-2-2V18a2 2 0 0 1 2-2z"/><circle cx="200" cy="28" r="3.4"/></svg>`,
   iphone: `<svg viewBox="0 0 220 120" aria-hidden="true">
-    <rect x="82" y="6" width="56" height="108" rx="13"/><rect x="100" y="12" width="20" height="6" rx="3"/></svg>`,
+    <rect x="85" y="5" width="50" height="110" rx="11"/><rect x="101" y="11" width="18" height="5.5" rx="2.75" class="ink"/></svg>`,
+  duo: `<svg viewBox="0 0 220 120" aria-hidden="true">
+    <path d="M73 8h60a14 14 0 0 1 14 14v76a14 14 0 0 1-14 14H73z"/><circle cx="134" cy="21" r="4.2" class="ink"/></svg>`,
+  ipad: `<svg viewBox="0 0 220 120" aria-hidden="true">
+    <rect x="46" y="14" width="128" height="92" rx="9"/><circle cx="110" cy="19" r="1.6" class="ink"/></svg>`,
+  mac: `<svg viewBox="0 0 220 120" aria-hidden="true">
+    <rect x="52" y="12" width="116" height="76" rx="6"/><path d="M38 96h144l-5 7H43z"/><path d="M103 12h14v3.5h-14z" class="ink"/></svg>`,
 };
 const PREFS_KEY = 'hhstudio.devices';
 let picker = null;   // { mode: 'first' | 'add' | 'replace', groupId?, family, model }
@@ -885,7 +888,7 @@ function renderDeviceList() {
   for (const fam of FAMILIES) {
     const models = DEVICES.filter(d => d.family === fam.id && state.available[d.id]?.length);
     const free = models.filter(m => !usedElsewhere(m.id));
-    if (!models.length) continue;
+    if (!models.length && !fam.soon) continue;
     const on = picker.family === fam.id;
     const tile = el('section', 'tile' + (on ? ' on' : '') + (free.length ? '' : ' taken'));
     tile.dataset.family = fam.id;
@@ -895,8 +898,9 @@ function renderDeviceList() {
     pick.setAttribute('role', 'radio');
     pick.setAttribute('aria-checked', String(on));
     pick.disabled = !free.length;
+    if (fam.soon) tile.classList.add('soon');
     pick.querySelector('.tile-name').textContent = fam.name;
-    pick.querySelector('.tile-note').textContent = !free.length ? 'Already on the board' : fam.id === 'duo' ? 'Inner and outer display' : '6.9″ display, in an Air, 18 Pro or 18 Pro Max frame';
+    pick.querySelector('.tile-note').textContent = fam.soon ? fam.note : !free.length ? 'Already on the board' : fam.note;
     pick.onclick = () => { picker.family = fam.id; picker.model = (free.find(m => m.id === state.models[fam.id]) || free[0]).id; renderDeviceList(); };
     tile.appendChild(pick);
     if (on && models.length > 1) {
@@ -918,9 +922,7 @@ function renderDeviceList() {
     list.appendChild(tile);
   }
   const d = deviceById(picker.model);
-  $('deviceSummary').textContent = d
-    ? `${d.name}: ${targetsOfDevice(d.id).map(t => `${sizeOf(t.id).width} × ${sizeOf(t.id).height}`).join(' and ')}, up to ${MAX_SHOTS} screenshots.`
-    : '';
+  $('deviceSummary').textContent = '';
   $('deviceDone').disabled = !d;
 }
 
@@ -930,7 +932,8 @@ function openDeviceDialog(mode = 'add') {
   const kind = replace ? 'replace' : mode;
   const current = replace && state.groups.find(g => g.id === replace).device;
   picker = { mode: kind, groupId: replace };
-  const firstFree = DEVICES.find(d => state.available[d.id]?.length && !usedElsewhere(d.id));
+  // The first device on offer, in the order the picker shows them (iPhone first).
+  const firstFree = FAMILIES.flatMap(f => DEVICES.filter(d => d.family === f.id)).find(d => state.available[d.id]?.length && !usedElsewhere(d.id));
   const start = current ? deviceById(current) : firstFree;
   picker.family = start?.family; picker.model = start?.id;
   const dlg = $('deviceDialog');

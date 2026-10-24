@@ -19,8 +19,10 @@ export const SCREENS = {
 
 // What people pick first: a kind of device, then (for iPhone) one model.
 export const FAMILIES = [
+  { id: 'iphone', name: 'iPhone', note: 'Air, 18 Pro or 18 Pro Max' },
   { id: 'duo', name: 'iPhone Duo', note: 'Inner and outer display' },
-  { id: 'iphone', name: 'iPhone', note: '6.9″ display' },
+  { id: 'ipad', name: 'iPad', note: 'Coming soon', soon: true },
+  { id: 'mac', name: 'Mac', note: 'Coming soon', soon: true },
 ];
 
 export const DEVICES = [
