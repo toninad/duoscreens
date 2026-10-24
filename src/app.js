@@ -364,10 +364,19 @@ function buildStructure() {
         cards.appendChild(card);
       });
       if (lang === state.baseLang && targets.some(t => countOn(group, t.id) < MAX_SHOTS)) {   // another screen of this device
-        const add = el('button', 'add-card', `${PLUS}<span>Add ${device.short || device.name} screen</span>`);
+        // A ghost of the next card: laid out like a real one, its dashed screen the size of the screen it
+        // will add (the same display and orientation as the card before it).
+        const next = newShot(group);
+        nextId--;   // only a preview; the real card is made on click
+        const size = sizeOf(next.target, next);
+        const slot = el('div', 'shot-card add-slot', '<header class="card-head"></header>');
+        const add = el('button', 'add-card', `<span class="add-label">${PLUS}<span>Add ${device.short || device.name} screen</span></span>`);
         add.type = 'button';
+        add.style.width = `${Math.round(size.width * K)}px`;
+        add.style.height = `${Math.round(size.height * K)}px`;
         add.onclick = () => { group.shots.push(newShot(group)); refresh({ fit: true }); };
-        cards.appendChild(add);
+        slot.appendChild(add);
+        cards.appendChild(slot);
       }
       if (state.langs.length > 1) row.append(head);   // a language label only once there are translations
       row.append(cards);
@@ -420,7 +429,7 @@ function groupHead(group, device) {
 }
 
 function syncSelectionUI() {
-  for (const card of document.querySelectorAll('.shot-card')) {
+  for (const card of document.querySelectorAll('.shot-card:not(.add-slot)')) {
     const shot = state.shots.find(s => s.id === +card.dataset.id);
     card.classList.toggle('selected', state.selection.has(+card.dataset.id));
     card.querySelector('.card-tag').textContent = shot?.style && Object.keys(shot.style).length ? 'Variation' : '';
@@ -641,7 +650,7 @@ function setupBoard() {
       pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
       drag = null;
     } else {
-      drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false, card: e.target.closest('.shot-card'), additive: e.shiftKey || e.metaKey };
+      drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false, card: e.target.closest('.shot-card:not(.add-slot)'), additive: e.shiftKey || e.metaKey };
     }
   });
   board.addEventListener('pointermove', (e) => {

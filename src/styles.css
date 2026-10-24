@@ -598,19 +598,22 @@ details[open] summary { margin-bottom: 12px; }
 .add-group svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
 /* Board chrome is drawn in board space, so it zooms with the screenshots; sized to read at the usual ~50% fit. */
 /* Board labels and controls keep one size on screen at any zoom (--ui = 1 / zoom, set by the app). */
-.group-head, .add-group, .group .row-head, .group .card-head, .group .frame-cap, .add-card > * { zoom: var(--ui, 1); }
-@media (max-width: 860px) { .add-card { align-self: stretch; width: auto; height: 220px !important; margin-bottom: 0; } }
+.group-head, .add-group, .group .row-head, .group .card-head, .group .frame-cap { zoom: var(--ui, 1); }
+
 .group-tools .swatches button { width: 20px; height: 20px; }
 .group-tools .segmented button { width: 28px; height: 24px; }
 .group-tools .pose-label { font-size: 12px; }
 
 /* A group is a soft panel, so its cards and its "add screen" card read as one set */
 .group { padding: calc(18px * var(--ui, 1)) calc(22px * var(--ui, 1)) calc(22px * var(--ui, 1)); border-radius: calc(22px * var(--ui, 1)); background: color-mix(in srgb, var(--card) 55%, transparent); box-shadow: 0 0 0 calc(.5px * var(--ui, 1)) var(--hairline); }
-.group .row-shots { align-items: stretch; }
+.group .row-shots { align-items: flex-start; }
 .group .add-card {
-  align-self: stretch; height: auto !important; width: calc(132px * var(--ui, 1)); margin: calc(30px * var(--ui, 1)) 0 calc(22px * var(--ui, 1));
-  border-radius: calc(14px * var(--ui, 1)); border-width: calc(1.5px * var(--ui, 1));
+  align-self: auto; margin: 0; padding: 0; border-radius: 6px; border-width: calc(1.5px * var(--ui, 1));
 }
+.add-slot { flex: none; }
+.add-slot:hover { background: none; }
+.add-label { display: flex; flex-direction: column; align-items: center; gap: 8px; zoom: var(--ui, 1); }
+.add-label svg { width: 26px; height: 26px; }
 /* The selected card's display and orientation: a small pill right below its frame, in place of the size caption */
 .card-pose { display: none; }
 .shot-card.selected .card-pose {
