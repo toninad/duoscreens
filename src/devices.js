@@ -93,25 +93,30 @@ const phoneFile = (device, color) => `vendor/frames/${device}/${color}.webp`;
 
 const images = new Map();     // file -> HTMLImageElement
 
-const loadImg = (src) => new Promise(resolve => {
-  const img = new Image();
-  img.onload = () => { images.set(src, img); resolve(true); };
-  img.onerror = () => resolve(false);
-  img.src = src;
-});
+const pending = new Map();    // file -> Promise<boolean>
+const loadImg = (src) => {
+  if (!pending.has(src)) pending.set(src, new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => { images.set(src, img); resolve(true); };
+    img.onerror = () => resolve(false);
+    img.src = src;
+  }));
+  return pending.get(src);
+};
 
-/** Loads every frame once. Returns { [deviceId]: colors that have files }; a device with none is left out. */
-export async function loadFrames() {
-  const available = {};
-  await Promise.all(DEVICES.flatMap(d => d.colors.map(async (c) => {
-    const files = d.id === 'duo'
-      ? d.displays.flatMap(x => ['portrait', 'landscape'].map(p => duoFile(c.id, x.id, p)))
-      : [phoneFile(d.id, c.id)];
-    const ok = await Promise.all(files.map(loadImg));
-    if (ok.every(Boolean)) (available[d.id] ||= new Set()).add(c.id);
-  })));
-  return Object.fromEntries(DEVICES.filter(d => available[d.id]).map(d => [d.id, d.colors.filter(c => available[d.id].has(c.id))]));
+/**
+ * Loads one finish of one device on demand (the Duo's four drawings, or an iPhone's one), so the app
+ * only downloads the frames in use. Resolves true when they're ready.
+ */
+export async function loadFrame(deviceId, colorId) {
+  const files = deviceId === 'duo'
+    ? ['inner', 'outer'].flatMap(x => ['portrait', 'landscape'].map(p => duoFile(colorId, x, p)))
+    : [phoneFile(deviceId, colorId)];
+  return (await Promise.all(files.map(loadImg))).every(Boolean);
 }
+
+/** The finishes on offer per device. Only finishes whose files are in vendor/frames/ are listed above. */
+export const availableFinishes = () => Object.fromEntries(DEVICES.map(d => [d.id, d.colors]));
 
 /** @returns {{ img: CanvasImageSource, geo: object } | null} */
 export function getFrame(deviceId, colorId, displayId, pose) {

@@ -1,6 +1,6 @@
 /* global Konva, JSZip */
 import { PRO, WATERMARK_TEXT, LANGUAGES } from './config.js';
-import { FAMILIES, DEVICES, TARGETS, SCREENS, targetById, deviceById, loadFrames, getFrame, framePreview } from './devices.js';
+import { FAMILIES, DEVICES, TARGETS, SCREENS, targetById, deviceById, loadFrame, availableFinishes, getFrame, framePreview } from './devices.js';
 import { TEMPLATES, LAYOUTS, FONTS, templateById } from './templates.js';
 import { buildComposition } from './render.js';
 import { canvasToRgbPng } from './png.js';
@@ -811,7 +811,7 @@ function deviceDetails(d, models) {
     b.type = 'button'; b.dataset.color = c.id; b.title = c.name; b.setAttribute('aria-label', c.name);
     b.setAttribute('aria-pressed', String(state.colors[d.id] === c.id));
     b.style.setProperty('--swatch', c.swatch);
-    b.onclick = () => { state.colors[d.id] = c.id; syncDeviceInputs(); renderBoard(); };
+    b.onclick = async () => { await loadFrame(d.id, c.id); state.colors[d.id] = c.id; syncDeviceInputs(); renderBoard(); };
     sw.appendChild(b);
   }
   const name = el('span', 'finish-name');
@@ -844,7 +844,8 @@ function deviceDetails(d, models) {
   return box;
 }
 
-function setDevices(ids) {
+async function setDevices(ids) {
+  await Promise.all(ids.map(id => loadFrame(id, state.colors[id])));   // frames first, so nothing draws without one
   state.devices = DEVICES.map(d => d.id).filter(id => ids.includes(id));
   syncDeviceInputs();
   syncToolbar();
@@ -1154,10 +1155,10 @@ async function boot() {
   await Promise.all([
     'Inter:400', 'Inter:600', 'Source Serif 4:500', 'Source Sans 3:400', 'Source Sans 3:600',
   ].map(s => { const [f, w] = s.split(':'); return document.fonts.load(`${w} 40px "${f}"`, 'AaČć'); })).catch(() => {});
-  const available = await loadFrames();
   setupInputs();
   setupInlineEditor();
-  const firstLaunch = setupDevice(available);
+  const firstLaunch = setupDevice(availableFinishes());
+  await Promise.all(state.devices.map(id => loadFrame(id, state.colors[id])));   // only the frames in use
   state.style = { ...themePatch(templateById('paper')), layout: 'top', headlineScale: 1 };
   setupBoard();
   syncToolbar();

@@ -41,22 +41,7 @@
         <span id="sizeInfo" class="board-info"></span>
         <input id="frameFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
       </div>
-      <div id="empty" class="empty">
-        <svg class="duo-sketch" viewBox="0 0 264 132" aria-hidden="true">
-          <!-- unfolded: wide inner display -->
-          <rect x="6" y="14" width="154" height="108" rx="15"/>
-          <!-- folded: cover display, flat hinge edge on the left, round corners on the right -->
-          <path d="M181 14h55a17 17 0 0 1 17 17v74a17 17 0 0 1-17 17h-55a2 2 0 0 1-2-2V16a2 2 0 0 1 2-2z"/>
-          <circle cx="239" cy="28" r="4.2"/>
-        </svg>
-        <h1>App Store screenshots, beautifully framed<span class="dot">.</span></h1>
-        <p>Add your screenshots and get every size App Store Connect asks for: iPhone Duo inside and out, iPhone Air and iPhone 18.</p>
-        <div class="empty-actions">
-          <button id="emptyAdd" class="btn primary">Choose screenshots</button>
-          <button id="emptySample" class="btn">Try a sample</button>
-        </div>
-        <p class="fine">Your images stay on this device.</p>
-      </div>
+      <div id="empty" class="loading" role="status" aria-label="Loading"><span></span><span></span><span></span></div>
       <div id="board" class="board" hidden aria-label="Screenshots board">
         <div id="boardWorld" class="board-world"></div>
       </div>

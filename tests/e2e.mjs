@@ -84,9 +84,11 @@ try {
   await page.waitForSelector('#deviceDialog[open]');
   check(true, 'First launch opens the device picker');
   await page.click('.tile[data-family="iphone"] .tile-select');
-  check(await page.evaluate(() => window.__dss.state.devices.join()) === 'iphone-18-pro-max', 'Free: picking iPhone replaces the Duo');
+  await page.waitForFunction(() => window.__dss.state.devices.join() === 'iphone-18-pro-max');
+  check(true, 'Free: picking iPhone replaces the Duo');
   await page.click('.tile[data-family="duo"] .tile-select');
-  check(await page.evaluate(() => window.__dss.state.devices.join()) === 'duo', 'Free: one device at a time');
+  await page.waitForFunction(() => window.__dss.state.devices.join() === 'duo');
+  check(true, 'Free: one device at a time');
   await page.click('#deviceDone');
   check(await page.$$eval('.shot-card .screen-add', bs => bs.length) === 2, 'The board starts with an empty card: an "add screenshot" screen per frame');
 
@@ -212,9 +214,11 @@ try {
   // iPhone: tick it, then pick one model. Its size joins the Duo's on every screenshot, in every language.
   await page.click('#devicesBtn');
   await page.click('.tile[data-family="iphone"] .tile-select');
+  await page.waitForSelector('[data-model="iphone-18-pro-max"]');
   check(await page.getAttribute('[data-model="iphone-18-pro-max"]', 'aria-checked') === 'true', 'iPhone starts on the 18 Pro Max');
   await page.click('[data-model="iphone-air"]');
   await page.click('.swatches[data-device="iphone-air"] [data-color="sky-blue"]');
+  await page.waitForFunction(() => window.__dss.state.colors['iphone-air'] === 'sky-blue' && window.__dss.state.devices.join() === 'duo,iphone-air');
   await page.screenshot({ path: path.join(out, 'device-picker.png') });
   await page.keyboard.press('Escape');
   check(await page.evaluate(() => window.__dss.state.devices.join()) === 'duo,iphone-air', 'One iPhone model at a time');
