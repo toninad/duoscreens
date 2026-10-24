@@ -24,11 +24,11 @@
 [hidden] { display: none !important; }   /* the hidden attribute always wins over display rules */
 
 :root {
-  --paper: #EFEBE8;
+  --paper: #FBFAF9;
   --ink: #121212;
   --orange: #FE5919;
-  --card: #FBFAF9;
-  --raised: #FFFFFF;
+  --card: #EFEBE8;
+  --raised: #FBFAF9;
   --muted: color-mix(in srgb, var(--ink) 52%, var(--paper));
   --faint: color-mix(in srgb, var(--ink) 30%, var(--paper));
   --hairline: color-mix(in srgb, var(--ink) 10%, transparent);
@@ -100,7 +100,7 @@ button, input, select, textarea { font: inherit; color: inherit; letter-spacing:
 .layout { flex: 1; display: flex; min-height: 0; }
 .layout > .stage-wrap {
   flex: 1; min-width: 0; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 0;
-  background: radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, #fff 45%, var(--paper)) 0%, var(--paper) 60%);
+  background: var(--paper);
 }
 h2 { font: 600 12px/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 4px 8px; }
 .muted { color: var(--muted); font-weight: 400; }
@@ -162,7 +162,6 @@ h2 { font: 600 12px/1 var(--sans); letter-spacing: .06em; text-transform: upperc
 .pill-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; }
 
 /* Stage */
-@media (prefers-color-scheme: dark) { .stage-wrap { background: radial-gradient(120% 80% at 50% 0%, #1c1a19 0%, var(--paper) 60%); } }
 .previews { display: flex; gap: 36px; align-items: flex-end; animation: rise .5s var(--ease); }
 .previews[hidden] { display: none; }
 .previews figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 14px; }
@@ -809,3 +808,14 @@ body { display: block; height: 100dvh; }
 .card-acts button:disabled { opacity: .3; cursor: default; }
 .card-acts svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 .group .shot-card:not(.selected):hover .frame { box-shadow: 0 0 0 calc(1px * var(--ui, 1)) color-mix(in srgb, var(--ink) 22%, transparent), 0 14px 30px -14px rgba(18,18,18,.35); }
+
+/* Dotted board, like FigJam: the dots pan and zoom with the board (set from applyView). */
+.board {
+  --dot: color-mix(in srgb, var(--ink) 16%, transparent);
+  background-image: radial-gradient(circle, var(--dot) 1px, transparent 1.3px);
+  background-size: var(--grid, 24px) var(--grid, 24px);
+  background-position: var(--grid-x, 0) var(--grid-y, 0);
+}
+/* Floating things that sit on the board itself take the container tone too. */
+.add-screen, .card-pose-pill { background: var(--card); }
+.card-pose .segmented button[aria-pressed=true] { background: var(--raised); }

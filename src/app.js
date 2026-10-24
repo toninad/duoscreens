@@ -190,6 +190,13 @@ function applyView() {
   // Labels and controls on the board are counter-scaled, so they stay the same size on screen at any
   // zoom (like Figma's frame names); only the screenshots grow and shrink.
   world.style.setProperty('--ui', String(1 / view.z));
+  // Dots every 24 board pixels; when zoomed out far they'd crowd, so skip to every 2nd, 4th…
+  let grid = 24 * view.z;
+  while (grid < 14) grid *= 2;
+  const board = $('board');
+  board.style.setProperty('--grid', `${grid}px`);
+  board.style.setProperty('--grid-x', `${view.x % grid}px`);
+  board.style.setProperty('--grid-y', `${view.y % grid}px`);
   $('zoomLabel').textContent = `${Math.round(view.z * 100)}%`;
   schedulePixelRatio();
 }
