@@ -136,11 +136,10 @@ export function buildComposition(layer, size, p) {
       const sx = dx + geo.screen.x * k, sy = dy + geo.screen.y * k;
       const sw = geo.screen.w * k, sh = geo.screen.h * k;
       const radii = geo.radii.map(r => r * k);
-      // Soft shadow from a body-shaped stand-in, so it never falls inside the see-through screen.
-      const body = geo.screen.x * k * 0.75;
-      layer.add(new Konva.Rect({
-        x: sx - body, y: sy - body, width: sw + body * 2, height: sh + body * 2,
-        cornerRadius: radii.map(r => r + body), fill: '#000',
+      // Shadow cast by the frame image itself, so it follows the real device outline. The part that
+      // falls inside the see-through screen is covered by the screenshot drawn next.
+      layer.add(new Konva.Image({
+        image: frame.img, x: dx, y: dy, width: dw, height: dh,
         shadowColor: '#000', shadowBlur: base * 0.06, shadowOpacity: 0.32, shadowOffsetY: base * 0.022,
       }));
       // Screenshot fills the screen opening; the frame on top covers the edges and adds the camera.
