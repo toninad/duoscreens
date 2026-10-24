@@ -65,12 +65,12 @@ export async function makeSampleScreenshot(width = 2007, height = 2853) {
 export const SAMPLE_SHOTS = [
   {
     headline: 'Every show, side by side', subheadline: 'Browse episodes while the artwork stays in view.',
-    inner: { landscape: 'samples/inner-landscape-show.png' },
-    outer: { portrait: 'samples/outer-portrait-home.png', landscape: 'samples/outer-landscape-player.png' },
+    inner: { landscape: 'samples/inner-landscape-show.webp' },
+    outer: { portrait: 'samples/outer-portrait-home.webp', landscape: 'samples/outer-landscape-player.webp' },
   },
   {
     headline: 'Your queue, always in reach', subheadline: 'Unfold to see what plays next.',
-    inner: { landscape: 'samples/inner-landscape-player.png' },
-    outer: { portrait: 'samples/outer-portrait-player.png', landscape: 'samples/outer-landscape-player.png' },
+    inner: { landscape: 'samples/inner-landscape-player.webp' },
+    outer: { portrait: 'samples/outer-portrait-home.webp', landscape: 'samples/outer-landscape-player.webp' },
   },
 ];

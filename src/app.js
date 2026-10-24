@@ -109,7 +109,7 @@ function syncTextInputs() {
   $('subheadline').value = t.subheadline;
   $('textFor').textContent = s ? `· screenshot ${state.selected + 1}` : '';
   for (const id of ['headline', 'subheadline', 'outerFile']) $(id).disabled = !s;
-  $('outerValue').textContent = s?.outerImage ? 'Custom image' : 'Same image';
+  $('outerValue').textContent = s?.outerImage ? 'Custom image' : s?.variants ? 'Cover capture' : 'Same image';
   $('outerValue').parentElement.setAttribute('aria-disabled', String(!s));
 }
 

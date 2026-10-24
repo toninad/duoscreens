@@ -48,7 +48,7 @@ All sizes live in one constant: `DUO_SIZES` in `src/config.js`. Each display can
 - Frame templates draw the real iPhone Duo frames from `vendor/frames/<finish>/{inner,outer}-{portrait,landscape}.webp`.
   The screen opening and corner radii of each frame are in `FRAME_GEOMETRY` (`src/frames.js`); the screenshot is
   cover-fitted into that opening and the frame (with the camera) is drawn on top. Finishes are listed in `DEVICE_COLORS`.
-- "Try a sample" loads real captures listed in `SAMPLE_SHOTS` (`src/sample.js`) from `samples/`, one per pose.
+- "Try a sample" loads real captures listed in `SAMPLE_SHOTS` (`src/sample.js`) from `samples/`, one per pose (HearHere captures).
   If they're missing it falls back to a generated screen at the current inner size.
 
 ## Run locally
