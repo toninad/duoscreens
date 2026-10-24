@@ -661,13 +661,8 @@ function syncDeviceInputs() {
   renderDeviceList();
 }
 
-// A card per kind of device. Ticking one opens its details: the model (iPhone), the finish and,
-// for the Duo, each display's orientation. The footer says what the export will contain.
-const FAMILY_ICON = {
-  duo: '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="7" width="18" height="18" rx="3"/><path d="M12 7v18"/><rect x="23.5" y="9" width="6" height="14" rx="2"/></svg>',
-  iphone: '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="9" y="3" width="14" height="26" rx="3.5"/><path d="M14 6.5h4"/></svg>',
-};
-
+// A row per kind of device with a switch. Turning one on shows its details right under it:
+// the model (iPhone), the finish and, for the Duo, each display's orientation.
 function renderDeviceList() {
   const list = $('deviceList');
   list.innerHTML = '';
@@ -677,13 +672,12 @@ function renderDeviceList() {
     const d = models.find(m => state.devices.includes(m.id));
     const card = el('section', 'device-card' + (d ? ' on' : ''));
     card.dataset.family = fam.id;
-    card.innerHTML = `<label class="device-head"><input type="checkbox" class="sr-only">
-      <span class="device-icon">${FAMILY_ICON[fam.id] || ''}</span>
-      <span class="device-text"><span class="device-name"></span><span class="device-note"></span></span>
-      <span class="device-check" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M4 8.5l2.6 2.5L12 5.5"/></svg></span></label>`;
+    card.innerHTML = `<label class="device-head"><span class="device-text"><span class="device-name"></span>
+      <span class="device-note"></span></span><input type="checkbox" role="switch" class="switch"></label>`;
     const box = card.querySelector('input');
     box.checked = !!d;
     box.disabled = !!d && state.devices.length === 1;   // keep at least one
+    box.setAttribute('aria-label', fam.name);
     box.onchange = () => toggleFamily(fam.id, box.checked);
     card.querySelector('.device-name').textContent = fam.name;
     const size = d?.displays.length === 1 ? d.displays[0].size.portrait : null;
@@ -692,17 +686,8 @@ function renderDeviceList() {
     if (d) card.appendChild(deviceDetails(d, models));
     list.appendChild(card);
   }
-  const targets = activeTargets();
-  $('deviceSummary').textContent = `Every screenshot exports in ${targets.length} size${targets.length > 1 ? 's' : ''}: `
-    + targets.map(t => `${t.display.label ? `${t.device.short} ${t.display.label.toLowerCase()}` : t.device.name} ${sizeOf(t.id).width} × ${sizeOf(t.id).height}`).join(', ') + '.';
-}
-
-function detailRow(label, ...content) {
-  const row = el('div', 'detail-row');
-  const l = el('span', 'detail-label');
-  l.textContent = label;
-  row.append(l, ...content);
-  return row;
+  const n = activeTargets().length;
+  $('deviceSummary').textContent = `${n} App Store size${n > 1 ? 's' : ''} per screenshot`;
 }
 
 function deviceDetails(d, models) {
@@ -720,8 +705,9 @@ function deviceDetails(d, models) {
       b.onclick = () => chooseModel(d.family, m.id);
       chips.appendChild(b);
     }
-    box.appendChild(detailRow('Model', chips));
+    box.appendChild(chips);
   }
+  const line = el('div', 'device-line');
   const colors = state.available[d.id];
   const sw = el('span', 'swatches');
   sw.dataset.device = d.id;
@@ -735,7 +721,7 @@ function deviceDetails(d, models) {
   }
   const name = el('span', 'finish-name');
   name.textContent = colors.find(c => c.id === state.colors[d.id])?.name || '';
-  box.appendChild(detailRow('Finish', sw, name));
+  line.append(sw, name);
   for (const x of d.displays) {
     if (x.poses?.length === 1) continue;   // iPhones are always portrait
     const tid = `${d.id}/${x.id}`;
@@ -745,15 +731,17 @@ function deviceDetails(d, models) {
     seg.setAttribute('aria-label', `${x.label} display orientation`);
     for (const v of ['portrait', 'landscape']) {
       const b = el('button', '', POSE_ICON[v]);
-      b.type = 'button'; b.dataset.v = v; b.title = `${x.label} display: ${v}`; b.setAttribute('aria-label', v);
+      b.type = 'button'; b.dataset.v = v; b.setAttribute('aria-label', v);
+      b.title = `${x.label} display: ${v}, ${x.size[v].width} × ${x.size[v].height}`;
       b.setAttribute('aria-pressed', String(state.pose[tid] === v));
       b.onclick = () => { state.pose[tid] = v; syncDeviceInputs(); renderBoard({ fit: true }); };
       seg.appendChild(b);
     }
-    const size = el('span', 'detail-size');
-    size.textContent = `${sizeOf(tid).width} × ${sizeOf(tid).height}`;
-    box.appendChild(detailRow(`${x.label} display`, seg, size));
+    const l = el('span', 'pose-label');
+    l.textContent = x.label;
+    line.append(l, seg);
   }
+  box.appendChild(line);
   return box;
 }
 
