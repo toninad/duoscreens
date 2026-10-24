@@ -661,7 +661,13 @@ function syncDeviceInputs() {
   renderDeviceList();
 }
 
-// A row per kind of device. Ticking one shows its details: the model (iPhone), finish and orientation.
+// A card per kind of device. Ticking one opens its details: the model (iPhone), the finish and,
+// for the Duo, each display's orientation. The footer says what the export will contain.
+const FAMILY_ICON = {
+  duo: '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="7" width="18" height="18" rx="3"/><path d="M12 7v18"/><rect x="23.5" y="9" width="6" height="14" rx="2"/></svg>',
+  iphone: '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="9" y="3" width="14" height="26" rx="3.5"/><path d="M14 6.5h4"/></svg>',
+};
+
 function renderDeviceList() {
   const list = $('deviceList');
   list.innerHTML = '';
@@ -669,40 +675,54 @@ function renderDeviceList() {
     const models = DEVICES.filter(d => d.family === fam.id && state.available[d.id]?.length);
     if (!models.length) continue;
     const d = models.find(m => state.devices.includes(m.id));
-    const row = el('div', 'device-row' + (d ? ' on' : ''));
-    row.dataset.family = fam.id;
-    row.innerHTML = '<label class="device-head"><input type="checkbox"><span class="device-name"></span><span class="muted"></span></label>';
-    const box = row.querySelector('input');
+    const card = el('section', 'device-card' + (d ? ' on' : ''));
+    card.dataset.family = fam.id;
+    card.innerHTML = `<label class="device-head"><input type="checkbox" class="sr-only">
+      <span class="device-icon">${FAMILY_ICON[fam.id] || ''}</span>
+      <span class="device-text"><span class="device-name"></span><span class="device-note"></span></span>
+      <span class="device-check" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M4 8.5l2.6 2.5L12 5.5"/></svg></span></label>`;
+    const box = card.querySelector('input');
     box.checked = !!d;
     box.disabled = !!d && state.devices.length === 1;   // keep at least one
     box.onchange = () => toggleFamily(fam.id, box.checked);
-    row.querySelector('.device-name').textContent = fam.name;
-    row.querySelector('.muted').textContent = d && models.length > 1 ? d.note : fam.note;
-    if (d) {
-      if (models.length > 1) {
-        const chips = el('div', 'model-chips');
-        chips.setAttribute('role', 'radiogroup');
-        chips.setAttribute('aria-label', `${fam.name} model`);
-        for (const m of models) {
-          const b = el('button');
-          b.type = 'button'; b.dataset.model = m.id; b.textContent = m.short;
-          b.setAttribute('role', 'radio');
-          b.setAttribute('aria-checked', String(m.id === d.id));
-          b.title = `${m.name} · ${m.note} · ${m.displays[0].size.portrait.width} × ${m.displays[0].size.portrait.height}`;
-          b.onclick = () => chooseModel(fam.id, m.id);
-          chips.appendChild(b);
-        }
-        row.appendChild(chips);
-      }
-      row.appendChild(deviceOptions(d));
-    }
-    list.appendChild(row);
+    card.querySelector('.device-name').textContent = fam.name;
+    const size = d?.displays.length === 1 ? d.displays[0].size.portrait : null;
+    card.querySelector('.device-note').textContent = !d ? fam.note : size ? `${d.note} · ${size.width} × ${size.height}` : d.note;
+    if (box.disabled) card.querySelector('.device-head').title = 'At least one device stays on';
+    if (d) card.appendChild(deviceDetails(d, models));
+    list.appendChild(card);
   }
+  const targets = activeTargets();
+  $('deviceSummary').textContent = `Every screenshot exports in ${targets.length} size${targets.length > 1 ? 's' : ''}: `
+    + targets.map(t => `${t.display.label ? `${t.device.short} ${t.display.label.toLowerCase()}` : t.device.name} ${sizeOf(t.id).width} × ${sizeOf(t.id).height}`).join(', ') + '.';
 }
 
-function deviceOptions(d) {
+function detailRow(label, ...content) {
+  const row = el('div', 'detail-row');
+  const l = el('span', 'detail-label');
+  l.textContent = label;
+  row.append(l, ...content);
+  return row;
+}
+
+function deviceDetails(d, models) {
+  const box = el('div', 'device-details');
+  if (models.length > 1) {
+    const chips = el('div', 'model-chips');
+    chips.setAttribute('role', 'radiogroup');
+    chips.setAttribute('aria-label', 'Model');
+    for (const m of models) {
+      const b = el('button');
+      b.type = 'button'; b.dataset.model = m.id; b.textContent = m.short;
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(m.id === d.id));
+      b.title = `${m.name} · ${m.note}`;
+      b.onclick = () => chooseModel(d.family, m.id);
+      chips.appendChild(b);
+    }
+    box.appendChild(detailRow('Model', chips));
+  }
   const colors = state.available[d.id];
-  const opts = el('div', 'device-opts');
   const sw = el('span', 'swatches');
   sw.dataset.device = d.id;
   for (const c of colors) {
@@ -713,26 +733,28 @@ function deviceOptions(d) {
     b.onclick = () => { state.colors[d.id] = c.id; syncDeviceInputs(); renderBoard(); };
     sw.appendChild(b);
   }
-  const name = el('span', 'dock-label finish-name');
+  const name = el('span', 'finish-name');
   name.textContent = colors.find(c => c.id === state.colors[d.id])?.name || '';
-  opts.append(sw, name);
+  box.appendChild(detailRow('Finish', sw, name));
   for (const x of d.displays) {
+    if (x.poses?.length === 1) continue;   // iPhones are always portrait
     const tid = `${d.id}/${x.id}`;
     const seg = el('div', 'segmented');
     seg.dataset.pose = tid;
     seg.setAttribute('role', 'group');
-    seg.setAttribute('aria-label', `${d.name} ${x.label} orientation`.replace(/\s+/g, ' '));
+    seg.setAttribute('aria-label', `${x.label} display orientation`);
     for (const v of ['portrait', 'landscape']) {
       const b = el('button', '', POSE_ICON[v]);
-      b.type = 'button'; b.dataset.v = v; b.title = `${x.label || d.name}: ${v}`; b.setAttribute('aria-label', v);
+      b.type = 'button'; b.dataset.v = v; b.title = `${x.label} display: ${v}`; b.setAttribute('aria-label', v);
       b.setAttribute('aria-pressed', String(state.pose[tid] === v));
       b.onclick = () => { state.pose[tid] = v; syncDeviceInputs(); renderBoard({ fit: true }); };
       seg.appendChild(b);
     }
-    if (x.label) { const l = el('span', 'dock-label'); l.textContent = x.label; opts.appendChild(l); }
-    opts.appendChild(seg);
+    const size = el('span', 'detail-size');
+    size.textContent = `${sizeOf(tid).width} × ${sizeOf(tid).height}`;
+    box.appendChild(detailRow(`${x.label} display`, seg, size));
   }
-  return opts;
+  return box;
 }
 
 function setDevices(ids) {

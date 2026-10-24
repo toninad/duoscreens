@@ -192,13 +192,14 @@ try {
 
   // iPhone: tick it, then pick one model. Its size joins the Duo's on every screenshot, in every language.
   await page.click('#devicesBtn');
-  await page.check('.device-row[data-family="iphone"] input');
+  await page.click('.device-card[data-family="iphone"] .device-head');
   check(await page.getAttribute('[data-model="iphone-18-pro-max"]', 'aria-checked') === 'true', 'iPhone starts on the 18 Pro Max');
   await page.click('[data-model="iphone-air"]');
   await page.click('.swatches[data-device="iphone-air"] [data-color="sky-blue"]');
   await page.screenshot({ path: path.join(out, 'device-picker.png') });
   await page.keyboard.press('Escape');
   check(await page.evaluate(() => window.__dss.state.devices.join()) === 'duo,iphone-air', 'One iPhone model at a time');
+  check(!(await page.$('.segmented[data-pose="iphone-air/main"]')), 'iPhones have no orientation choice: always portrait');
   check(await page.$$eval('.lang-row[data-lang="en"] .shot-card:first-child .frame', fs => fs.length) === 3, 'A card shows a frame per App Store size');
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(out, 'devices.png') });

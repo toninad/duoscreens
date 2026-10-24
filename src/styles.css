@@ -296,9 +296,10 @@ input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border: 0; bord
 .swatches { display: inline-flex; gap: 8px; }
 .swatches button {
   width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; background: var(--swatch);
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); transition: box-shadow .25s var(--ease);
+  --edge: inset 0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent);   /* visible on light and dark cards */
+  box-shadow: var(--edge); transition: box-shadow .25s var(--ease);
 }
-.swatches button[aria-pressed=true] { box-shadow: inset 0 0 0 1px rgba(0,0,0,.12), 0 0 0 2px var(--card), 0 0 0 3.5px var(--orange); }
+.swatches button[aria-pressed=true] { box-shadow: var(--edge), 0 0 0 2px var(--raised), 0 0 0 3.5px var(--orange); }
 
 /* Board: one pannable, zoomable canvas with a row per language and a card per screenshot */
 .board { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: default; outline: none; }
@@ -460,18 +461,42 @@ details[open] summary { margin-bottom: 12px; }
 @media (max-width: 380px) { .brand-title { display: none; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
-/* Devices popover: a row per device; its finish and orientation show once it's on */
-.device-pop { width: 380px; }
-.device-row { padding: 12px 16px; border-top: .5px solid var(--hairline); }
-.device-head { display: flex; align-items: baseline; gap: 10px; cursor: pointer; }
-.device-head input { accent-color: var(--orange); width: 16px; height: 16px; align-self: center; margin: 0; flex: none; }
-.device-name { font-weight: 600; }
-.device-head .muted { margin-left: auto; font-size: 13px; }
-.device-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 2px 26px; }
-.device-opts .finish-name { margin-right: auto; }
-.model-chips { display: inline-flex; gap: 2px; padding: 2px; margin: 10px 0 0 26px; border-radius: 999px; background: var(--fill); }
+/* Devices popover: a card per kind of device; ticking one opens its model, finish and orientation */
+.device-pop { width: 400px; }
+.device-pop-head { padding: 16px 18px 4px; }
+.device-pop-head .pop-title { margin: 0; font-size: 17px; }
+.device-pop-head .hint { margin: 4px 0 0; }
+.device-list { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.device-card { border-radius: 16px; background: var(--fill); transition: background .2s, box-shadow .2s; }
+.device-card.on { background: var(--raised); box-shadow: inset 0 0 0 1.5px var(--orange), 0 6px 18px -10px rgba(0,0,0,.25); }
+.device-head { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; border-radius: 16px; }
+.device-head:has(input:disabled) { cursor: default; }
+.device-head:has(input:focus-visible) { outline: 2px solid var(--orange); outline-offset: 2px; }
+.device-icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--card); color: var(--muted); flex: none; transition: color .2s, background .2s; }
+.device-card.on .device-icon { color: var(--ink); background: var(--fill); }
+.device-icon svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.device-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.device-name { font-weight: 600; font-size: 15px; }
+.device-note { color: var(--muted); font-size: 12.5px; }
+.device-check { width: 22px; height: 22px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 22%, transparent); display: grid; place-items: center; transition: background .2s, box-shadow .2s; }
+.device-check svg { width: 14px; height: 14px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+.device-card.on .device-check { background: var(--orange); box-shadow: none; }
+.device-card.on .device-check svg { opacity: 1; }
+.device-details { display: flex; flex-direction: column; gap: 8px; padding: 0 14px 14px 62px; }
+.detail-row { display: flex; align-items: center; gap: 10px; min-height: 32px; }
+.detail-label { width: 84px; flex: none; font-size: 12.5px; color: var(--muted); }
+.detail-size { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.finish-name { font-size: 13px; color: var(--muted); }
+.model-chips { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--fill); }
 .model-chips button {
   height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: var(--muted);
-  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .2s, color .2s;
 }
-.model-chips button[aria-checked=true] { background: var(--raised); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 0 0 .5px rgba(0,0,0,.04); }
+.model-chips button:hover { color: var(--ink); }
+.model-chips button[aria-checked=true] { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 0 0 .5px rgba(0,0,0,.04); }
+.device-summary { margin: 0; padding: 12px 18px 16px; border-top: .5px solid var(--hairline); font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+@media (max-width: 860px) {
+  .device-details { padding-left: 14px; }
+  .detail-label { width: 72px; }
+}

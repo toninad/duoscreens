@@ -36,7 +36,7 @@ export const DEVICES = [
   },
   {
     id: 'iphone-18-pro-max', family: 'iphone', name: 'iPhone 18 Pro Max', short: '18 Pro Max', note: '6.9″ display',
-    displays: [{ id: 'main', label: '', size: sizes(1320, 2868), screen: 'iphone' }],
+    displays: [{ id: 'main', label: '', size: sizes(1320, 2868), screen: 'iphone', poses: ['portrait'] }],
     geometry: { w: 1176, h: 2400, screen: { x: 60, y: 53, w: 1056, h: 2294 }, radii: [150, 150, 150, 150] },
     colors: [
       { id: 'black', name: 'Black', swatch: '#2c2c2e' },
@@ -47,7 +47,7 @@ export const DEVICES = [
   },
   {
     id: 'iphone-air', family: 'iphone', name: 'iPhone Air', short: 'Air', note: '6.9″ display',
-    displays: [{ id: 'main', label: '', size: sizes(1260, 2736), screen: 'iphone' }],
+    displays: [{ id: 'main', label: '', size: sizes(1260, 2736), screen: 'iphone', poses: ['portrait'] }],
     geometry: { w: 1150, h: 2400, screen: { x: 50, y: 60, w: 1050, h: 2280 }, radii: [157, 157, 157, 157] },
     colors: [
       { id: 'space-black', name: 'Space Black', swatch: '#2a2a2c' },
@@ -58,7 +58,7 @@ export const DEVICES = [
   },
   {
     id: 'iphone-18-pro', family: 'iphone', name: 'iPhone 18 Pro', short: '18 Pro', note: '6.3″ display',
-    displays: [{ id: 'main', label: '', size: sizes(1206, 2622), screen: 'iphone' }],
+    displays: [{ id: 'main', label: '', size: sizes(1206, 2622), screen: 'iphone', poses: ['portrait'] }],
     geometry: { w: 1174, h: 2400, screen: { x: 63, y: 60, w: 1048, h: 2280 }, radii: [160, 160, 160, 160] },
     colors: [
       { id: 'black', name: 'Black', swatch: '#2c2c2e' },
@@ -87,12 +87,11 @@ const DUO_GEOMETRY = {
 };
 
 // Files: vendor/frames/<duo finish>/<display>-<pose>.webp for the Duo, vendor/frames/<device>/<color>.webp
-// (portrait) for the iPhones, which are turned for landscape.
+// (portrait only) for the iPhones.
 const duoFile = (color, display, pose) => `vendor/frames/${color}/${display}-${pose}.webp`;
 const phoneFile = (device, color) => `vendor/frames/${device}/${color}.webp`;
 
 const images = new Map();     // file -> HTMLImageElement
-const turned = new Map();     // file -> canvas rotated a quarter turn counter-clockwise
 
 const loadImg = (src) => new Promise(resolve => {
   const img = new Image();
@@ -114,27 +113,6 @@ export async function loadFrames() {
   return Object.fromEntries(DEVICES.filter(d => available[d.id]).map(d => [d.id, d.colors.filter(c => available[d.id].has(c.id))]));
 }
 
-function quarterTurn(src) {
-  if (!turned.has(src)) {
-    const img = images.get(src);
-    const c = document.createElement('canvas');
-    c.width = img.height; c.height = img.width;
-    const ctx = c.getContext('2d');
-    ctx.translate(0, img.width);
-    ctx.rotate(-Math.PI / 2);
-    ctx.drawImage(img, 0, 0);
-    turned.set(src, c);
-  }
-  return turned.get(src);
-}
-
-// Portrait geometry turned a quarter counter-clockwise: the top edge becomes the left edge.
-function turnGeometry(g) {
-  const s = g.screen;
-  const [tl, tr, br, bl] = g.radii;
-  return { w: g.h, h: g.w, screen: { x: s.y, y: g.w - (s.x + s.w), w: s.h, h: s.w }, radii: [tr, br, bl, tl] };
-}
-
 /** @returns {{ img: CanvasImageSource, geo: object } | null} */
 export function getFrame(deviceId, colorId, displayId, pose) {
   const device = deviceById(deviceId);
@@ -144,9 +122,6 @@ export function getFrame(deviceId, colorId, displayId, pose) {
     const img = images.get(duoFile(color, displayId, pose)) || images.get(duoFile(device.colors[0].id, displayId, pose));
     return img ? { img, geo: DUO_GEOMETRY[displayId][pose] } : null;
   }
-  const src = phoneFile(deviceId, color);
-  if (!images.has(src)) return null;
-  return pose === 'landscape'
-    ? { img: quarterTurn(src), geo: turnGeometry(device.geometry) }
-    : { img: images.get(src), geo: device.geometry };
+  const img = images.get(phoneFile(deviceId, color));
+  return img ? { img, geo: device.geometry } : null;
 }
