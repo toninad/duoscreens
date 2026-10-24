@@ -34,6 +34,7 @@ export const DUO_SIZES = Object.freeze({
 const API_BASE = globalThis.DSS_API_BASE || '';
 export const LICENSE_ENDPOINT = `${API_BASE}/api/license`;
 export const TRANSLATE_ENDPOINT = `${API_BASE}/api/translate`;
+export const CLAIM_ENDPOINT = `${API_BASE}/api/claim`;
 
 /** Pro is a one-time purchase on Polar, which emails a license key after checkout. */
 export const PRO = {

@@ -4,7 +4,7 @@ import { DEVICE_COLORS, loadFrames, getFrame } from './frames.js';
 import { TEMPLATES, LAYOUTS, FONTS, templateById } from './templates.js';
 import { buildComposition } from './render.js';
 import { canvasToRgbPng } from './png.js';
-import { checkLicense, storedLicenseKey } from './license.js';
+import { checkLicense, claimCheckout, storedLicenseKey } from './license.js';
 import { translateTexts } from './translate.js';
 import { makeSampleScreenshot, SAMPLE_SHOTS } from './sample.js';
 
@@ -563,9 +563,25 @@ function setupLicense() {
   // Back from Polar checkout: open the license popover ready for the key.
   const params = new URLSearchParams(location.search);
   if (params.get('checkout') === 'success') {
+    const checkoutId = params.get('checkout_id');
     history.replaceState(null, '', location.pathname);
-    $('licenseStatus').textContent = 'Thanks for buying Pro! Paste the license key from your receipt email.';
-    requestAnimationFrame(() => { $('licensePop').showPopover(); $('licenseKey').focus(); });
+    requestAnimationFrame(() => $('licensePop').showPopover());
+    if (!checkoutId) {
+      $('licenseStatus').textContent = 'Thanks for buying Pro! Paste the license key from your receipt email.';
+      return;
+    }
+    $('licenseStatus').textContent = 'Thanks for buying Pro! Unlocking…';
+    $('licenseBtn').disabled = true;
+    claimCheckout(checkoutId).then(r => {
+      $('licenseBtn').disabled = false;
+      if (r.valid) {
+        $('licenseKey').value = r.key;
+        applyLicense(true, 'Pro unlocked. Thank you! Your key is shown above and in your receipt email; keep it for other devices.');
+      } else {
+        $('licenseStatus').textContent = r.message;
+        $('licenseKey').focus();
+      }
+    });
   }
 }
 

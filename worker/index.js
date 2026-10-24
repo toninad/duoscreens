@@ -3,9 +3,10 @@
 // wrangler.jsonc); only /api/* does.
 import { onRequestPost as license } from '../functions/api/license.js';
 import { onRequestPost as translate } from '../functions/api/translate.js';
+import { onRequestPost as claim } from '../functions/api/claim.js';
 import { json } from '../functions/_lib/http.js';
 
-const routes = { '/api/license': license, '/api/translate': translate };
+const routes = { '/api/license': license, '/api/translate': translate, '/api/claim': claim };
 
 export default {
   async fetch(request, env, ctx) {

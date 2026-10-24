@@ -101,6 +101,9 @@ buyer a license key. The app never talks to Polar or Anthropic directly; two Clo
 
 - **`POST /api/license`** `{ key, device }`: activates the browser as a device on the key (Polar enforces the
   limit of 3), validates it, and caches a good result in D1 for a day. Keys are stored only as SHA-256 hashes.
+- **`POST /api/claim`** `{ checkoutId, device }`: called when the buyer returns from Polar checkout. Reads the
+  checkout, finds the license key Polar created for that customer (via a short customer session) and activates
+  it, so Pro unlocks on the spot. Works for a week after the checkout; the key is also in the receipt email.
 - **`POST /api/translate`** `{ key, device, sourceLanguage, targetLanguages[], texts[] }`: checks the license, then
   the monthly allowance (one run = all texts into one language), then calls Claude once per language with
   structured JSON output and server-side refusal fallback. Only the text is sent, never images or the key.
@@ -120,7 +123,7 @@ Both accept calls only from the app's own origin and are rate-limited per IP.
 | Variable `ALLOWED_ORIGIN` | `https://studio.hearhere.media` |
 | Variable `TRANSLATION_RUNS_PER_MONTH` | optional, default `100` |
 | Variable `ANTHROPIC_MODEL` | optional, default `claude-opus-5-5` |
-| Secret `POLAR_ACCESS_TOKEN` | Polar organization token with `license_keys:read` and `license_keys:write` |
+| Secret `POLAR_ACCESS_TOKEN` | Polar organization token with `license_keys:read`, `license_keys:write`, `checkouts:read` and `customer_sessions:write` |
 | Secret `ANTHROPIC_API_KEY` | Anthropic API key (use a separate workspace with a spend limit) |
 
 **Polar setup:** a one-time product "Duo Screenshot Studio Pro" at €15.99 with a License Keys benefit (prefix `DUO`,

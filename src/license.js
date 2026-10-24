@@ -1,7 +1,7 @@
 // Pro license: checked by the server (functions/api/license.js), which talks to Polar.
 // The key and a per-browser device id are kept in localStorage; a successful check is trusted
 // offline for a few days so the app keeps working without a connection.
-import { LICENSE_ENDPOINT } from './config.js';
+import { LICENSE_ENDPOINT, CLAIM_ENDPOINT } from './config.js';
 
 const KEY = 'dss.licenseKey';
 const DEVICE = 'dss.deviceId';
@@ -44,4 +44,33 @@ export async function checkLicense(key) {
   if (data.valid) { set(KEY, key); set(LAST_OK, String(Date.now())); }
   else if (res.status === 403 || res.status === 404) { set(KEY, ''); set(LAST_OK, ''); }
   return { valid: !!data.valid, message: data.message || `License check failed (${res.status}).` };
+}
+
+/**
+ * After checkout: fetch the key that checkout created and unlock this device, retrying for a
+ * little while because Polar grants the key a few seconds after payment.
+ * @returns {Promise<{ valid: boolean, key?: string, message: string }>}
+ */
+export async function claimCheckout(checkoutId, { attempts = 10, delay = 2000 } = {}) {
+  for (let i = 0; i < attempts; i++) {
+    let res, data = {};
+    try {
+      res = await fetch(CLAIM_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checkoutId, device: deviceId() }),
+      });
+      if (!res.headers.get('content-type')?.includes('json')) break;
+      data = await res.json();
+    } catch {
+      break;
+    }
+    if (data.valid && data.key) {
+      set(KEY, data.key); set(LAST_OK, String(Date.now()));
+      return { valid: true, key: data.key, message: data.message };
+    }
+    if (!data.pending) return { valid: false, message: data.message || 'Could not unlock automatically.' };
+    await new Promise(r => setTimeout(r, delay));
+  }
+  return { valid: false, message: 'Your key is on its way by email. Paste it here when it arrives.' };
 }

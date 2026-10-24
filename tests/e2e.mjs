@@ -182,6 +182,20 @@ try {
   const landPngs = await verifyZip(land.zip, 'landscape', 12);
   check(landPngs.every(n => n.includes('2853x2007') || n.includes('2034x1398')), 'Landscape export uses 2853×2007 and 2034×1398');
 
+  // Back from Polar checkout: the app claims the key itself (first answer: still being created).
+  let claims = 0;
+  await page.route('**/api/claim', async route => {
+    claims++;
+    const { checkoutId } = route.request().postDataJSON();
+    if (claims === 1) return route.fulfill({ status: 202, json: { pending: true, message: 'Your license key is being created.' } });
+    await route.fulfill({ json: { valid: checkoutId === '11111111-2222-3333-4444-555555555555', key: PRO_KEY, message: 'Pro unlocked. Thank you!' } });
+  });
+  await page.evaluate(() => localStorage.clear());
+  await page.goto(BASE + '/index.html?checkout=success&checkout_id=11111111-2222-3333-4444-555555555555');
+  await page.waitForFunction(() => window.__dss?.state.licensed === true, null, { timeout: 15_000 });
+  check(claims === 2 && (await page.inputValue('#licenseKey')) === PRO_KEY, 'Checkout return unlocks Pro and shows the key');
+  check(!(await page.evaluate(() => location.search)), 'Checkout parameters are removed from the address');
+
   check(errors.length === 0, `No page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
 } finally {
   await browser.close();

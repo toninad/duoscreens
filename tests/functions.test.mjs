@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { onRequestPost as license } from '../functions/api/license.js';
 import { onRequestPost as translate } from '../functions/api/translate.js';
+import { onRequestPost as claim } from '../functions/api/claim.js';
 
 // --- D1 stand-in: the subset of the D1 API the functions use -------------------------------------
 function fakeD1() {
@@ -39,6 +40,20 @@ function stubFetch() {
   globalThis.fetch = async (input, init = {}) => {
     const url = typeof input === 'string' ? input : input.url;
     const body = init.body ? JSON.parse(typeof init.body === 'string' ? init.body : await new Response(init.body).text()) : {};
+    if (url.includes('/v1/checkouts/')) {
+      polarCalls.push({ url, body });
+      const id = url.split('/v1/checkouts/')[1];
+      const co = polarState.checkouts[id];
+      return co ? Response.json(co) : Response.json({ detail: 'Not found' }, { status: 404 });
+    }
+    if (url.endsWith('/v1/customer-sessions')) {
+      polarCalls.push({ url, body });
+      return Response.json({ token: `cs_${body.customer_id}` });
+    }
+    if (url.includes('/v1/customer-portal/license-keys/')) {
+      polarCalls.push({ url, body, auth: init.headers.Authorization });
+      return Response.json({ items: polarState.portalKeys });
+    }
     if (url.includes('/v1/license-keys/')) {
       polarCalls.push({ url, body });
       if (body.key !== VALID_KEY) return Response.json({ detail: 'Not found' }, { status: 404 });
@@ -66,7 +81,7 @@ function stubFetch() {
 const ORIGIN = 'https://studio.hearhere.media';
 let env;
 beforeEach(() => {
-  polarCalls = []; anthropicCalls = []; polarState = { activations: 0, status: 'granted' };
+  polarCalls = []; anthropicCalls = []; polarState = { activations: 0, status: 'granted', checkouts: {}, portalKeys: [] };
   env = {
     DB: fakeD1(), POLAR_ACCESS_TOKEN: 'polar_oat_test', POLAR_ORGANIZATION_ID: 'org_test',
     ANTHROPIC_API_KEY: 'sk-ant-test', ALLOWED_ORIGIN: ORIGIN, TRANSLATION_RUNS_PER_MONTH: '5',
@@ -148,4 +163,40 @@ test('translate: monthly allowance is enforced', async () => {
 test('translate: rejects unsupported languages and oversized input', async () => {
   assert.equal((await call(translate, '/api/translate', { key: VALID_KEY, device: DEVICE, targetLanguages: ['xx'], texts: ['Hi'] })).status, 400);
   assert.equal((await call(translate, '/api/translate', { key: VALID_KEY, device: DEVICE, targetLanguages: ['de'], texts: ['x'.repeat(301)] })).status, 413);
+});
+
+// --- /api/claim: unlock straight from the checkout success page ------------------------------------
+const CHECKOUT = '11111111-2222-3333-4444-555555555555';
+const paid = (over = {}) => ({ id: CHECKOUT, status: 'succeeded', customer_id: 'cus_1', organization_id: 'org_test', created_at: new Date().toISOString(), ...over });
+
+test('claim: a paid checkout returns its key, activated on this device', async () => {
+  polarState.checkouts[CHECKOUT] = paid();
+  polarState.portalKeys = [{ key: VALID_KEY, status: 'granted', created_at: new Date().toISOString() }];
+  const r = await call(claim, '/api/claim', { checkoutId: CHECKOUT, device: DEVICE });
+  assert.equal(r.status, 200); assert.equal(r.body.key, VALID_KEY); assert.equal(r.body.valid, true);
+  const portal = polarCalls.find(c => c.url.includes('/customer-portal/'));
+  assert.equal(portal.auth, 'Bearer cs_cus_1', 'keys are listed with the customer session, not the org token');
+  assert.ok(polarCalls.some(c => c.url.endsWith('/activate')), 'device is activated');
+});
+
+test('claim: pending while Polar is still creating the key', async () => {
+  polarState.checkouts[CHECKOUT] = paid();
+  const r = await call(claim, '/api/claim', { checkoutId: CHECKOUT, device: DEVICE });
+  assert.equal(r.status, 202); assert.equal(r.body.pending, true);
+});
+
+test('claim: pending while payment is still confirming', async () => {
+  polarState.checkouts[CHECKOUT] = paid({ status: 'confirmed' });
+  assert.equal((await call(claim, '/api/claim', { checkoutId: CHECKOUT, device: DEVICE })).status, 202);
+});
+
+test('claim: unpaid, foreign or old checkouts are refused', async () => {
+  polarState.portalKeys = [{ key: VALID_KEY, status: 'granted' }];
+  polarState.checkouts[CHECKOUT] = paid({ status: 'expired' });
+  assert.equal((await call(claim, '/api/claim', { checkoutId: CHECKOUT, device: DEVICE })).status, 402);
+  polarState.checkouts[CHECKOUT] = paid({ organization_id: 'org_other' });
+  assert.equal((await call(claim, '/api/claim', { checkoutId: CHECKOUT, device: DEVICE })).status, 404);
+  polarState.checkouts[CHECKOUT] = paid({ created_at: new Date(Date.now() - 8 * 86400_000).toISOString() });
+  assert.equal((await call(claim, '/api/claim', { checkoutId: CHECKOUT, device: DEVICE })).status, 410);
+  assert.equal((await call(claim, '/api/claim', { checkoutId: 'not-a-uuid', device: DEVICE })).status, 400);
 });
