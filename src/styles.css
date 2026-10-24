@@ -617,12 +617,16 @@ details[open] summary { margin-bottom: 12px; }
 .add-label { display: flex; flex-direction: column; align-items: center; gap: 8px; zoom: var(--ui, 1); }
 .add-label svg { width: 26px; height: 26px; }
 /* The selected card's display and orientation: a small pill right below its frame, in place of the size caption */
-.card-pose { display: none; }
-.shot-card.selected .card-pose {
-  display: flex; gap: 2px; width: max-content; margin: 8px auto 0; zoom: var(--ui, 1);
-  padding: 3px; border-radius: 999px; background: var(--raised); box-shadow: 0 0 0 .5px var(--hairline), 0 6px 16px -8px rgba(0,0,0,.3);
+.card-pose {
+  position: absolute; left: 0; right: 0; top: calc(var(--fh) + 6px); z-index: 4; display: flex; justify-content: center;
+  pointer-events: none; opacity: 0; transform: translateY(-3px); transition: opacity .15s, transform .15s;
 }
-.shot-card.selected .frame-cap { display: none; }
+.shot-card:hover .card-pose, .shot-card.selected .card-pose { opacity: 1; transform: none; }
+.shot-card:hover .card-pose-pill, .shot-card.selected .card-pose-pill { pointer-events: auto; }
+.card-pose-pill {
+  display: flex; gap: 2px; zoom: var(--ui, 1); padding: 3px; border-radius: 999px;
+  background: var(--raised); box-shadow: 0 0 0 .5px var(--hairline), 0 8px 20px -8px rgba(0,0,0,.35);
+}
 .card-pose .segmented { background: none; padding: 0; gap: 2px; }
 .card-pose .segmented + .segmented { padding-left: 3px; margin-left: 1px; border-left: 1px solid var(--hairline); }
 .card-pose .segmented button { width: 30px; height: 26px; color: var(--muted); }

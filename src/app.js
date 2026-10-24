@@ -316,7 +316,7 @@ function buildStructure() {
         };
         // Which display and orientation this card is: a small pill on the frame's top edge, shown when
         // the card is selected (the Duo has two displays; iPhones are always portrait).
-        const poseBox = el('div', 'card-pose');
+        const poseBox = el('div', 'card-pose-pill');
         for (const t of targets) {
           const poses = t.display.poses || ['portrait', 'landscape'];
           if (targets.length < 2 && poses.length < 2) continue;   // iPhones: one display, always portrait
@@ -356,7 +356,12 @@ function buildStructure() {
           const cap = el('figcaption', 'frame-cap', `<span class="card-num">${pad2(i + 1)}</span><span class="cap-text"></span><span class="card-tag"></span>`);
           if (lang === state.baseLang) cap.querySelector('.cap-text').textContent = `${t.display.label ? t.display.label + ' · ' : ''}${size.width} × ${size.height}`;
           wrap.append(cap, tools);
-          if (poseBox.childElementCount) wrap.appendChild(poseBox);
+          if (poseBox.childElementCount) {   // floats over the space under the frame, on hover or selection
+            const pose = el('div', 'card-pose');
+            pose.appendChild(poseBox);
+            wrap.style.setProperty('--fh', fr.style.height);
+            wrap.appendChild(pose);
+          }
           framesEl.appendChild(wrap);
           const stage = new Konva.Stage({ container: fr.firstChild, width: Math.round(size.width * K), height: Math.round(size.height * K) });
           const layer = new Konva.Layer({ listening: false });

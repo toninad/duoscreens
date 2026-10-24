@@ -202,7 +202,7 @@ try {
   // Landscape poses export Apple's landscape sizes, in both finishes.
   // Orientation is per screenshot: select a card and pick it for each display in its header.
   for (const n of [1, 2, 3, 4]) {
-    await page.click(`.shot-card:nth-child(${n}) .card-num`);
+    await page.click(`.shot-card:nth-child(${n}) .frame`, { position: { x: 3, y: 3 } });   // select by clicking the frame
     await page.click(`.shot-card:nth-child(${n}) .segmented[data-pose="duo/${n <= 2 ? 'inner' : 'outer'}"] [data-v="landscape"]`);
   }
   await page.keyboard.press('Escape');
@@ -248,7 +248,7 @@ try {
   if (air) await fs.writeFile(path.join(out, 'iphone-air-01.png'), await all.zip.file(air).async('nodebuffer'));
 
   // Variations: duplicate the second screenshot, restyle only the copy.
-  await page.click('.lang-row[data-lang="en"] .shot-card:nth-child(2) .card-num');
+  await page.click('.lang-row[data-lang="en"] .shot-card:nth-child(2) .frame', { position: { x: 3, y: 3 } });
   await page.click('.lang-row[data-lang="en"] .shot-card:nth-child(2) [data-a="dup"]');
   await page.waitForFunction(() => window.__dss.state.groups[0].shots.length === 5);
   check((await page.textContent('#scopeLabel')) === 'iPhone Duo 3', 'The copy is selected and the dock scopes to it');
