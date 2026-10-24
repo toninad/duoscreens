@@ -159,11 +159,19 @@ function applyView() {
 }
 
 let prTimer;
+// Frames on screen redraw at the real zoom (up to the export's own resolution), so zooming in
+// stays sharp; frames off screen stay light so a big board doesn't eat memory.
 function schedulePixelRatio() {
   clearTimeout(prTimer);
   prTimer = setTimeout(() => {
-    const pr = Math.min(4, Math.max(1, view.z * (window.devicePixelRatio || 1)));
+    const dpr = window.devicePixelRatio || 1;
+    const full = Math.min(1 / K, view.z * dpr);
+    const light = Math.min(full, 2);
+    const vw = innerWidth, vh = innerHeight;
     for (const f of frames.values()) {
+      const r = f.el.getBoundingClientRect();
+      const onScreen = r.right > 0 && r.bottom > 0 && r.left < vw && r.top < vh;
+      const pr = Math.max(1, Math.round((onScreen ? full : light) * 4) / 4);
       if (f.pr === pr) continue;
       f.layer.getCanvas().setPixelRatio(pr);
       f.pr = pr;
@@ -304,7 +312,7 @@ function renderBoard({ fit = false } = {}) {
   $('sizeInfo').textContent = `Inner ${sizeOf('inner').width} × ${sizeOf('inner').height} · Outer ${sizeOf('outer').width} × ${sizeOf('outer').height}`;
   if (!has) return;
   const key = JSON.stringify([state.shots.map(s => s.id), state.langs, state.pose]);
-  if (key !== structureKey) { buildStructure(); structureKey = key; }
+  if (key !== structureKey) { buildStructure(); structureKey = key; requestAnimationFrame(schedulePixelRatio); }
   syncSelectionUI();
   drawAll();
   if (fit) requestAnimationFrame(fitBoard);
