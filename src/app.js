@@ -302,11 +302,14 @@ function buildStructure() {
         card.dataset.id = shot.id;
         // Quiet by default: just the frame and one caption line. Tools appear on hover or selection.
         card.innerHTML = '<div class="card-frames"></div>';
+        // On the frame's top edge: duplicate (left corner), move left/right (middle), remove (right corner).
         const tools = el('div', 'card-tools', `
-            <button type="button" data-a="dup" title="Duplicate as a variation" aria-label="Duplicate" ${countOn(group, targetOf(shot).id) >= MAX_SHOTS ? 'disabled' : ''}>${ICON.dup}</button>
-            <button type="button" data-a="left" title="Move left" aria-label="Move left" ${i === 0 ? 'disabled' : ''}>${ICON.left}</button>
-            <button type="button" data-a="right" title="Move right" aria-label="Move right" ${i === group.shots.length - 1 ? 'disabled' : ''}>${ICON.right}</button>
-            <button type="button" data-a="del" title="Remove" aria-label="Remove">${ICON.del}</button>`);
+            <button type="button" class="card-btn dup" data-a="dup" title="Duplicate as a variation" aria-label="Duplicate" ${countOn(group, targetOf(shot).id) >= MAX_SHOTS ? 'disabled' : ''}>${ICON.dup}</button>
+            <span class="card-move">
+              <button type="button" data-a="left" title="Move left" aria-label="Move left" ${i === 0 ? 'disabled' : ''}>${ICON.left}</button>
+              <button type="button" data-a="right" title="Move right" aria-label="Move right" ${i === group.shots.length - 1 ? 'disabled' : ''}>${ICON.right}</button>
+            </span>
+            <button type="button" class="card-btn del" data-a="del" title="Remove" aria-label="Remove">${ICON.del}</button>`);
         tools.onclick = (e) => {
           const a = e.target.closest('button')?.dataset.a;
           if (a === 'dup') duplicateShot(shot.id);

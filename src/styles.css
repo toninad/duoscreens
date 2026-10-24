@@ -695,3 +695,21 @@ details[open] summary { margin-bottom: 12px; }
   appearance: none; -webkit-appearance: none;
 }
 .group-select:hover { background-color: var(--fill); color: var(--ink); }
+
+/* Card tools on the frame's top edge: circles on the corners, a small pill in the middle */
+.group .card-tools {
+  position: absolute; left: 0; right: 0; top: 0; bottom: auto; height: 0; margin: 0; padding: 0; zoom: 1; z-index: 3;
+  background: none; box-shadow: none; border-radius: 0; display: block; opacity: 0; pointer-events: none; transition: opacity .15s;
+}
+.group .shot-card:hover .card-tools, .group .shot-card.selected .card-tools { opacity: 1; }
+.group .card-btn, .group .card-move {
+  position: absolute; top: 0; zoom: var(--ui, 1); pointer-events: auto;
+  background: var(--raised); box-shadow: 0 0 0 .5px var(--hairline), 0 6px 14px -6px rgba(0,0,0,.3);
+}
+.group .shot-card:not(:hover):not(.selected) .card-btn, .group .shot-card:not(:hover):not(.selected) .card-move { pointer-events: none; }
+.group .card-btn { width: 28px; height: 28px; border-radius: 50%; }
+.group .card-btn.dup { left: 0; transform: translate(-50%, -50%); }
+.group .card-btn.del { right: 0; transform: translate(50%, -50%); }
+.group .card-btn.del:hover { color: #c0392b; }
+.group .card-move { left: 50%; transform: translate(-50%, -50%); display: flex; padding: 1px; border-radius: 999px; }
+.group .card-move button { width: 28px; height: 26px; border-radius: 999px; }
