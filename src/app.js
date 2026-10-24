@@ -1,17 +1,18 @@
 /* global Konva, JSZip */
-import { DUO_SIZES, EXPORT_ORIENTATION, LICENSE, WATERMARK_TEXT, LANGUAGES } from './config.js';
+import { DUO_SIZES, LICENSE, WATERMARK_TEXT, LANGUAGES } from './config.js';
+import { DEVICE_COLORS, loadFrames, getFrame } from './frames.js';
 import { TEMPLATES, FONTS, templateById } from './templates.js';
 import { buildComposition } from './render.js';
 import { canvasToRgbPng } from './png.js';
 import { checkLicense, storedLicenseKey, storeLicenseKey } from './license.js';
 import { translateTexts, translateConfigured } from './translate.js';
-import { makeSampleScreenshot } from './sample.js';
+import { makeSampleScreenshot, SAMPLE_SHOTS } from './sample.js';
 
 const $ = (id) => document.getElementById(id);
 const svg = (d) => `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${d}"/></svg>`;
 const ICONS = { up: svg('M4 10l4-4 4 4'), down: svg('M4 6l4 4 4-4'), del: svg('M4.5 4.5l7 7M11.5 4.5l-7 7') };
 const DISPLAYS = ['inner', 'outer'];
-const sizeOf = (d) => DUO_SIZES[d][EXPORT_ORIENTATION];
+const sizeOf = (d) => DUO_SIZES[d][state.pose[d]];
 
 const state = {
   shots: [],            // { id, name, image, outerImage, text: { [lang]: { headline, subheadline } } }
@@ -21,6 +22,8 @@ const state = {
   activeLang: 'en',
   style: null,
   licensed: false,
+  pose: { inner: 'portrait', outer: 'portrait' },   // App Store Connect takes either orientation per display
+  deviceColor: DEVICE_COLORS[0].id,
 };
 let nextId = 1;
 
@@ -126,12 +129,10 @@ const previewStages = {};
 function ensurePreviewStages() {
   for (const d of DISPLAYS) {
     if (previewStages[d]) continue;
-    const { width, height } = sizeOf(d);
     const stage = new Konva.Stage({ container: d === 'inner' ? 'stageInner' : 'stageOuter', width: 10, height: 10 });
     const layer = new Konva.Layer({ listening: false });
     stage.add(layer);
-    previewStages[d] = { stage, layer, width, height };
-    $(d + 'Size').textContent = `${width} × ${height}`;
+    previewStages[d] = { stage, layer };
   }
 }
 
@@ -145,13 +146,15 @@ function previewScale() {
   const availH = Math.max(200, narrow ? window.innerHeight * 0.55 : wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 40);
   const inner = sizeOf('inner'), outer = sizeOf('outer');
   // both previews share the same pixel scale so their relative size is honest
-  return Math.min(availH / inner.height, availW / (inner.width + outer.width));
+  return Math.min(availH / Math.max(inner.height, outer.height), availW / (inner.width + outer.width));
 }
 
 function compositionProps(shot, display, lang = state.activeLang) {
   const t = textFor(shot, lang);
   return {
-    image: display === 'outer' && shot.outerImage ? shot.outerImage : shot.image,
+    image: shot.variants?.[display]?.[state.pose[display]]
+      || (display === 'outer' && shot.outerImage) || shot.image,
+    frame: getFrame(state.deviceColor, display, state.pose[display]),
     headline: t.headline, subheadline: t.subheadline,
     style: state.style, watermark: !state.licensed, watermarkText: WATERMARK_TEXT,
   };
@@ -166,9 +169,11 @@ function renderPreview() {
   const s = previewScale();
   for (const d of DISPLAYS) {
     const p = previewStages[d];
-    p.stage.size({ width: Math.round(p.width * s), height: Math.round(p.height * s) });
+    const size = sizeOf(d);
+    $(d + 'Size').textContent = `${size.width} × ${size.height}`;
+    p.stage.size({ width: Math.round(size.width * s), height: Math.round(size.height * s) });
     p.stage.scale({ x: s, y: s });
-    buildComposition(p.layer, { width: p.width, height: p.height }, compositionProps(shot, d));
+    buildComposition(p.layer, size, compositionProps(shot, d));
   }
 }
 
@@ -212,6 +217,27 @@ async function addFiles(files) {
   refresh();
 }
 
+const loadUrl = (src) => new Promise((resolve) => {
+  const img = new Image();
+  img.onload = () => resolve(img);
+  img.onerror = () => resolve(null);
+  img.src = src;
+});
+
+// Loads the real sample captures; returns [] if they aren't in the repo, so the generated sample is used.
+async function loadSampleShots() {
+  const shots = [];
+  for (const s of SAMPLE_SHOTS) {
+    const variants = { inner: {}, outer: {} };
+    for (const d of ['inner', 'outer']) for (const [pose, src] of Object.entries(s[d])) variants[d][pose] = await loadUrl(src);
+    const image = variants.inner.landscape || variants.inner.portrait || variants.outer.portrait;
+    if (!image) return [];
+    shots.push({ id: nextId++, name: 'HearHere sample', image, outerImage: null, variants,
+      text: { [state.baseLang]: { headline: s.headline, subheadline: s.subheadline } } });
+  }
+  return shots;
+}
+
 function setupDropzone() {
   const dz = $('dropzone');
   $('fileInput').onchange = (e) => { addFiles(e.target.files); e.target.value = ''; };
@@ -223,7 +249,17 @@ function setupDropzone() {
     target.addEventListener('drop', (e) => { over(false)(e); addFiles(e.dataTransfer.files); });
   }
   const addSample = async () => {
-    const blob = await makeSampleScreenshot();
+    const shots = await loadSampleShots();
+    if (shots.length) {
+      // The captures were taken unfolded in landscape, so show the inner display that way.
+      if (shots.some(s => s.variants.inner.landscape)) state.pose.inner = 'landscape';
+      state.shots.push(...shots);
+      if (state.selected < 0) state.selected = state.shots.length - shots.length;
+      syncDeviceInputs();
+      return refresh();
+    }
+    const { width, height } = sizeOf('inner');   // match the current inner pose, so nothing is cropped
+    const blob = await makeSampleScreenshot(width, height);
     addFiles([new File([blob], 'sample-screenshot.png', { type: 'image/png' })]);
   };
   $('sampleBtn').onclick = addSample;
@@ -255,6 +291,35 @@ function setupInputs() {
     e.target.value = '';
   };
   window.addEventListener('resize', () => { renderPreview(); placeIndicator(); });
+}
+
+// ---------- Device: pose and color ----------
+function syncDeviceInputs() {
+  for (const seg of document.querySelectorAll('.segmented[data-pose]')) {
+    for (const b of seg.children) b.setAttribute('aria-pressed', String(b.dataset.v === state.pose[seg.dataset.pose]));
+  }
+  for (const b of $('colorSwatches').children) b.setAttribute('aria-pressed', String(b.dataset.color === state.deviceColor));
+  $('colorName').textContent = DEVICE_COLORS.find(c => c.id === state.deviceColor)?.name || '';
+}
+function setupDevice(colors) {
+  for (const seg of document.querySelectorAll('.segmented[data-pose]')) {
+    seg.onclick = (e) => {
+      const v = e.target.closest('button')?.dataset.v;
+      if (!v) return;
+      state.pose[seg.dataset.pose] = v;
+      syncDeviceInputs();
+      renderPreview();
+    };
+  }
+  const sw = $('colorSwatches');
+  for (const c of colors) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.color = c.id; b.title = c.name; b.setAttribute('aria-label', c.name);
+    b.style.setProperty('--swatch', c.swatch);
+    b.onclick = () => { state.deviceColor = c.id; syncDeviceInputs(); renderPreview(); };
+    sw.appendChild(b);
+  }
+  syncDeviceInputs();
 }
 
 // ---------- Translate ----------
@@ -378,7 +443,9 @@ async function boot() {
   await Promise.all([
     'Inter:400', 'Inter:600', 'Inter:700', 'Inter:800', 'Space Grotesk:500', 'Space Grotesk:700', 'DM Serif Display:400',
   ].map(s => { const [f, w] = s.split(':'); return document.fonts.load(`${w} 40px "${f}"`, 'AaČć'); })).catch(() => {});
+  const colors = await loadFrames();
   setupInputs();
+  setupDevice(colors);
   setTemplate('midnight');
   setupDropzone();
   setupTranslate();

@@ -26,8 +26,6 @@ export const DUO_SIZES = Object.freeze({
   }),
 });
 
-/** Orientation used for export. MVP only lays out portrait. TODO: landscape templates. */
-export const EXPORT_ORIENTATION = 'portrait';
 
 /**
  * Translate endpoint. Leave empty to disable the "Translate" button.

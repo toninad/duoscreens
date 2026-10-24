@@ -40,7 +40,16 @@ Sources, checked 2026-10-24:
 - Secondary: https://appstorescreenshotstudio.com/posts/iphone-duo-app-store-screenshot-sizes/ notes that the inner
   *screenshot* size (2007 × 2853) is larger than the inner *panel* resolution (1878 × 2670). Use the spec size.
 
-All sizes live in one constant: `DUO_SIZES` in `src/config.js`. The MVP exports **portrait only**.
+All sizes live in one constant: `DUO_SIZES` in `src/config.js`. Each display can be posed **portrait or landscape**
+(Device › Inner display / Outer display), and the export uses the matching Apple size.
+
+### Device frames and samples
+
+- Frame templates draw the real iPhone Duo frames from `vendor/frames/<finish>/{inner,outer}-{portrait,landscape}.webp`.
+  The screen opening and corner radii of each frame are in `FRAME_GEOMETRY` (`src/frames.js`); the screenshot is
+  cover-fitted into that opening and the frame (with the camera) is drawn on top. Finishes are listed in `DEVICE_COLORS`.
+- "Try a sample" loads real captures listed in `SAMPLE_SHOTS` (`src/sample.js`) from `samples/`, one per pose.
+  If they're missing it falls back to a generated screen at the current inner size.
 
 ## Run locally
 

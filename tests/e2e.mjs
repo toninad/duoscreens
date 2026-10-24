@@ -11,7 +11,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const PORT = 8765;
 const BASE = `http://127.0.0.1:${PORT}`;
-const EXPECTED = { inner: [2007, 2853], outer: [1398, 2034] };
+// Apple's iPhone Duo sizes, portrait and landscape.
+const VALID = { inner: ['2007x2853', '2853x2007'], outer: ['1398x2034', '2034x1398'] };
 const out = path.join(here, 'out');
 await fs.mkdir(out, { recursive: true });
 
@@ -38,8 +39,9 @@ async function verifyZip(zip, label, expectedCount) {
   check(pngs.length === expectedCount, `${label}: ZIP has ${pngs.length} PNGs (expected ${expectedCount}): ${pngs.join(', ')}`);
   for (const name of pngs) {
     const info = pngInfo(Buffer.from(await zip.file(name).async('uint8array')));
-    const display = name.includes('-inner-') ? 'inner' : 'outer';
-    const [w, h] = EXPECTED[display];
+    const [, display, folder] = name.match(/iPhone-Duo-(inner|outer)-(\d+x\d+)\//);
+    const [w, h] = folder.split('x').map(Number);
+    check(VALID[display].includes(folder), `${label}: ${folder} is an App Store size for the ${display} display`);
     check(info.sig && info.width === w && info.height === h, `${label}: ${name} is ${info.width}×${info.height} (expected ${w}×${h})`);
     check(info.colorType === 2 && info.bitDepth === 8, `${label}: ${name} is 8-bit RGB without alpha (colorType=${info.colorType})`);
   }
@@ -131,6 +133,18 @@ try {
   await fs.writeFile(path.join(root, 'docs', 'sample-export-outer-free.png'), await free.zip.file(outerName).async('nodebuffer'));
   const deInner = freePngs.find(n => n.startsWith('de/') && n.includes('-inner-') && n.endsWith('02.png'));
   await fs.writeFile(path.join(out, 'de-inner-02.png'), await free.zip.file(deInner).async('nodebuffer'));
+
+  // Landscape poses export Apple's landscape sizes, in both finishes.
+  await page.click('.segmented[data-pose="inner"] [data-v="landscape"]');
+  await page.click('.segmented[data-pose="outer"] [data-v="landscape"]');
+  const finishes = await page.$$eval('#colorSwatches button', bs => bs.map(b => b.dataset.color));
+  check(finishes.includes('night-sky'), `Device finishes available: ${finishes.join(', ')}`);
+  await page.click(`#colorSwatches [data-color="${finishes.at(-1)}"]`);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(out, 'landscape.png') });
+  const land = await exportZip(page, 'landscape');
+  const landPngs = await verifyZip(land.zip, 'landscape', 8);
+  check(landPngs.every(n => n.includes('2853x2007') || n.includes('2034x1398')), 'Landscape export uses 2853×2007 and 2034×1398');
 
   check(errors.length === 0, `No page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
 } finally {

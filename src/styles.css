@@ -225,6 +225,21 @@ input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border: 0; bord
 .template-grid button.bottom::after { top: 0; bottom: 40%; border-radius: 0 0 4px 4px; }
 .template-grid button.bottom span { top: auto; bottom: 14%; }
 
+/* Device: segmented control and finish swatches */
+.segmented { display: inline-flex; padding: 2px; border-radius: 9px; background: var(--fill); flex: none; }
+.segmented button {
+  appearance: none; border: 0; background: transparent; cursor: pointer; color: var(--muted);
+  font-size: 13px; font-weight: 600; padding: 5px 10px; border-radius: 7px; transition: background .25s var(--ease), color .2s, box-shadow .25s;
+}
+.segmented button[aria-pressed=true] { background: var(--raised); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 0 0 .5px rgba(0,0,0,.04); }
+.finish { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.swatches { display: inline-flex; gap: 8px; }
+.swatches button {
+  width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; background: var(--swatch);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); transition: box-shadow .25s var(--ease);
+}
+.swatches button[aria-pressed=true] { box-shadow: inset 0 0 0 1px rgba(0,0,0,.12), 0 0 0 2px var(--card), 0 0 0 3.5px var(--orange); }
+
 /* Disclosure rows */
 details summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; min-height: 24px; }
 details summary::-webkit-details-marker { display: none; }
