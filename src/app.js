@@ -336,6 +336,14 @@ function buildStructure() {
           });
           fr.style.width = `${Math.round(size.width * K)}px`;
           fr.style.height = `${Math.round(size.height * K)}px`;
+          // On the board the screenshot is rounded like the display it's for (exports stay square):
+          // the screen's corner radii scaled to the card, per corner, so the Duo's outer display keeps
+          // its square hinge side.
+          const geo = getFrame(t.device.id, state.colors[t.device.id], t.display.id, poseOf(shot))?.geo;
+          if (geo?.radii) {
+            const k = size.width * K / geo.screen.w;
+            fr.style.borderRadius = geo.radii.map(r => `${(r * k).toFixed(1)}px`).join(' ');
+          }
           const wrap = el('figure', 'frame-wrap');
           wrap.appendChild(fr);
           const cap = el('figcaption', 'frame-cap', `<span class="card-num">${pad2(i + 1)}</span><span class="cap-text"></span><span class="card-tag"></span>`);
