@@ -202,7 +202,11 @@ const ICON = {
 };
 
 function applyView() {
-  $('boardWorld').style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
+  const world = $('boardWorld');
+  world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
+  // Labels and controls on the board are counter-scaled, so they stay the same size on screen at any
+  // zoom (like Figma's frame names); only the screenshots grow and shrink.
+  world.style.setProperty('--ui', String(1 / view.z));
   $('zoomLabel').textContent = `${Math.round(view.z * 100)}%`;
   schedulePixelRatio();
 }
@@ -248,13 +252,18 @@ function zoomBy(factor) {
 /** Fits every row and card on screen, leaving room for the floating bars. */
 function fitBoard() {
   const world = $('boardWorld'), board = $('board');
-  const w = world.offsetWidth, h = world.offsetHeight;
-  if (!w || !h) return;
+  if (!world.offsetWidth || !world.offsetHeight) return;
   const narrow = matchMedia('(max-width: 860px)').matches;
   const top = narrow ? 64 : 76, bottom = narrow ? 92 : 104, side = narrow ? 16 : 48;
   const bw = board.clientWidth - side * 2, bh = board.clientHeight - top - bottom;
-  // Phones stack the cards in one column, so fit the width and let people pan down.
-  view.z = Math.min(1.25, Math.max(0.08, narrow ? bw / w : Math.min(bw / w, bh / h)));
+  // The board's labels keep their screen size, so the world's size depends on the zoom: settle it.
+  let w, h;
+  for (let i = 0; i < 4; i++) {
+    w = world.offsetWidth; h = world.offsetHeight;
+    // Phones stack the cards in one column, so fit the width and let people pan down.
+    view.z = Math.min(1, Math.max(0.08, narrow ? bw / w : Math.min(bw / w, bh / h)));
+    world.style.setProperty('--ui', String(1 / view.z));
+  }
   view.x = side + (bw - w * view.z) / 2;
   view.y = top + Math.max(0, (bh - h * view.z) / 2);
   applyView();
@@ -338,7 +347,8 @@ function buildStructure() {
         add.onclick = () => { group.shots.push(newShot(group)); refresh({ fit: true }); };
         cards.appendChild(add);
       }
-      row.append(head, cards);
+      if (state.langs.length > 1) row.append(head);   // a language label only once there are translations
+      row.append(cards);
       section.appendChild(row);
     }
     world.appendChild(section);
