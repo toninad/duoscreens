@@ -1,5 +1,5 @@
 // Builds the static site into _site/ for Cloudflare Pages (and GitHub Pages):
-//   - copies index.html, the stylesheet, vendor/ and samples/
+//   - copies index.html, the stylesheet, vendor/ and samples/, and the terms, privacy and refund pages
 //   - bundles src/app.js and its modules into one minified file (harder to tamper with, one request)
 //   - stamps ?v=<commit> on the stylesheet and script so browsers never mix old and new files
 // The server code in functions/ is deployed by Cloudflare from the repo root, not from _site/.
@@ -14,6 +14,8 @@ await mkdir(`${out}/src`, { recursive: true });
 await cp('vendor', `${out}/vendor`, { recursive: true });
 await cp('samples', `${out}/samples`, { recursive: true });
 await cp('src/styles.css', `${out}/src/styles.css`);
+await cp('src/legal.css', `${out}/src/legal.css`);
+for (const page of ['terms.html', 'privacy.html', 'refunds.html']) await cp(page, `${out}/${page}`);
 
 await build({
   entryPoints: ['src/app.js'],

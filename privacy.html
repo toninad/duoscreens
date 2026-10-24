@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy — HearHere Studio</title>
+  <meta name="description" content="How HearHere Studio handles your data: your screenshots stay in your browser.">
+  <link rel="stylesheet" href="src/legal.css">
+</head>
+<body>
+  <main class="page">
+    <nav class="top"><a href="/">← HearHere Studio</a><a href="mailto:feedback@hearhere.media">Contact</a></nav>
+    <h1>Privacy<span class="dot">.</span></h1>
+    <p class="meta">Last updated 24 October 2026</p>
+
+    <p>The short version: your screenshots never leave your device. I collect as little as possible, and nothing is used for ads or tracking.</p>
+    <p>HearHere Studio is run by Toni Nad, who is responsible for your data. Contact: <a href="mailto:feedback@hearhere.media">feedback@hearhere.media</a>.</p>
+
+    <h2>Your screenshots and texts</h2>
+    <p>Everything you make is processed in your browser. Screenshots, headlines and exports aren't uploaded to any server.</p>
+    <p>The only exception is translation (Pro). When you translate, the headline and subheadline texts, and the languages you picked, are sent to Anthropic's Claude API to be translated. Screenshots are never sent. Anthropic processes the text to return the translation; see <a href="https://www.anthropic.com/legal/privacy">Anthropic's privacy policy</a>.</p>
+
+    <h2>Buying Pro</h2>
+    <p>Payments are handled by <a href="https://polar.sh">Polar</a>, the merchant of record. Polar collects your name, email, billing country and payment details to process the purchase and VAT; see Polar's privacy policy at <a href="https://polar.sh">polar.sh</a>. I never see your card details.</p>
+
+    <h2>Your license key</h2>
+    <p>To check that a license is valid, the HearHere Studio server keeps:</p>
+    <ul>
+      <li>a one-way fingerprint (SHA-256 hash) of your license key, never the key itself, and its status from Polar;</li>
+      <li>a random ID your browser makes up once, to count how many browsers use the key (up to 3);</li>
+      <li>how many translations the key has used this month.</li>
+    </ul>
+    <p>None of this contains your name or email.</p>
+
+    <h2>Technical data</h2>
+    <p>To stop abuse, the server counts requests per IP address. That counter is deleted after about two minutes. The site is hosted on Cloudflare, which processes standard request data (like IP address and browser type) to deliver and protect the site.</p>
+
+    <h2>Stored in your browser</h2>
+    <p>Your browser's local storage keeps your license key, the random browser ID and your device choices, so you don't have to set them up again. There are no cookies, no analytics and no ads. You can clear this any time by removing the license under Pro, or by clearing the site's data in your browser.</p>
+
+    <h2>Your rights</h2>
+    <p>You can ask what data I hold about you, ask for it to be corrected or deleted, and complain to your data protection authority. Email <a href="mailto:feedback@hearhere.media">feedback@hearhere.media</a> with your license key, and I'll remove its records.</p>
+
+    <h2>Changes</h2>
+    <p>If this policy changes, the new version will be posted here with a new date.</p>
+
+    <footer><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/refunds">Refunds</a><a href="mailto:feedback@hearhere.media">feedback@hearhere.media</a></footer>
+  </main>
+</body>
+</html>

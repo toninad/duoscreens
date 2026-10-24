@@ -162,6 +162,8 @@ try {
   // Unlock: a wrong key stays locked, the Pro key unlocks
   await page.click('#licenseBadge');
   check((await page.textContent('#buyBtn')).includes('€15.99'), 'Pro price shown');
+  check(await page.isHidden('#licenseActive'), 'Free: the Pro popover offers Pro, not "Pro is active"');
+  check(await page.isVisible('.buy-terms a[href="/refunds"]'), 'Refund policy is linked next to the buy button');
   await page.fill('#licenseKey', 'not-a-real-key');
   await page.click('#licenseBtn');
   await page.waitForFunction(() => /not found/.test(document.getElementById('licenseStatus').textContent));
@@ -279,6 +281,10 @@ try {
   await page.keyboard.press('Escape');
   check(!(await page.evaluate(() => location.search)), 'Checkout parameters are removed from the address');
 
+  for (const pageName of ['terms', 'privacy', 'refunds']) {
+    const res = await page.goto(`${BASE}/${pageName}.html`);
+    check(res.ok() && (await page.textContent('body')).includes('feedback@hearhere.media'), `${pageName} page is up with the contact address`);
+  }
   check(errors.length === 0, `No page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
 } finally {
   await browser.close();
