@@ -157,10 +157,9 @@ figcaption b { color: var(--ink); font-weight: 600; }
 
 /* Empty state */
 .empty { max-width: 440px; text-align: center; animation: rise .6s var(--ease); }
-.duo-sketch { width: 180px; height: auto; margin: 0 auto 28px; display: block; fill: none; stroke: var(--ink); stroke-width: 1.4; stroke-linejoin: round; opacity: .85; }
-.duo-sketch .hinge { stroke-dasharray: 2 4; stroke: var(--faint); }
-.duo-sketch .island { fill: var(--ink); stroke: none; }
-.duo-sketch .dot { fill: var(--orange); stroke: none; }
+.duo-sketch { width: 220px; height: auto; margin: 0 auto 30px; display: block; fill: none; stroke: var(--ink); stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; opacity: .85; }
+.duo-sketch .hinge { stroke-dasharray: 1.5 4; stroke: var(--faint); }
+.duo-sketch .notch, .duo-sketch .edge { stroke: var(--faint); stroke-width: 1.1; }
 .empty h1 { font: 500 34px/1.12 var(--serif); letter-spacing: -0.025em; margin: 0 0 14px; text-wrap: balance; }
 .empty h1 .dot { color: var(--orange); }
 .empty p { color: var(--muted); font-size: 16px; line-height: 1.5; margin: 0 auto; max-width: 380px; text-wrap: pretty; }

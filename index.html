@@ -42,12 +42,16 @@
 
     <section class="stage-wrap">
       <div id="empty" class="empty">
-        <svg class="duo-sketch" viewBox="0 0 220 150" aria-hidden="true">
-          <rect x="8" y="10" width="100" height="134" rx="12"/>
-          <line x1="58" y1="14" x2="58" y2="140" class="hinge"/>
-          <rect x="132" y="38" width="74" height="106" rx="12"/>
-          <rect x="155" y="44" width="28" height="7" rx="3.5" class="island"/>
-          <circle cx="212" cy="140" r="4.5" class="dot"/>
+        <svg class="duo-sketch" viewBox="0 0 264 132" aria-hidden="true">
+          <!-- unfolded: wide inner display, crease down the middle, hinge notches top and bottom -->
+          <rect x="6" y="14" width="154" height="108" rx="15"/>
+          <line x1="83" y1="18" x2="83" y2="118" class="hinge"/>
+          <path d="M79.5 11.5v5M86.5 11.5v5M79.5 119.5v5M86.5 119.5v5" class="notch"/>
+          <circle cx="145" cy="28" r="4.2"/>
+          <!-- folded: cover display, flat hinge edge on the left, round corners on the right -->
+          <path d="M184 14h52a17 17 0 0 1 17 17v74a17 17 0 0 1-17 17h-52a5 5 0 0 1-5-5V19a5 5 0 0 1 5-5z"/>
+          <line x1="185.5" y1="20" x2="185.5" y2="116" class="edge"/>
+          <circle cx="239" cy="28" r="4.2"/>
         </svg>
         <h1>Make your app ready for iPhone Duo<span class="dot">.</span></h1>
         <p>Add a screenshot and get both sizes App Store Connect asks for: the inner display unfolded, and the outer cover display.</p>
