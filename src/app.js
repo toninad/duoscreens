@@ -372,19 +372,13 @@ function buildStructure() {
         cards.appendChild(card);
       });
       if (lang === state.baseLang && targets.some(t => countOn(group, t.id) < MAX_SHOTS)) {   // another screen of this device
-        // A ghost of the next card: laid out like a real one, its dashed screen the size of the screen it
-        // will add (the same display and orientation as the card before it).
-        const next = newShot(group);
-        nextId--;   // only a preview; the real card is made on click
-        const size = sizeOf(next.target, next);
-        const slot = el('div', 'shot-card add-slot');
-        const add = el('button', 'add-card', `<span class="add-label">${PLUS}<span>Add ${device.short || device.name} screen</span></span>`);
+        // A round "+" after the last screen; the new card starts like the one before it.
+        const add = el('button', 'add-screen', PLUS);
         add.type = 'button';
-        add.style.width = `${Math.round(size.width * K)}px`;
-        add.style.height = `${Math.round(size.height * K)}px`;
+        add.title = `Add ${device.family === 'iphone' ? 'an iPhone' : `a ${device.short || device.name}`} screen`;
+        add.setAttribute('aria-label', add.title);
         add.onclick = () => { group.shots.push(newShot(group)); refresh({ fit: true }); };
-        slot.appendChild(add);
-        cards.appendChild(slot);
+        cards.appendChild(add);
       }
       if (state.langs.length > 1) row.append(head);   // a language label only once there are translations
       row.append(cards);
@@ -437,7 +431,7 @@ function groupHead(group, device) {
 }
 
 function syncSelectionUI() {
-  for (const card of document.querySelectorAll('.shot-card:not(.add-slot)')) {
+  for (const card of document.querySelectorAll('.shot-card')) {
     const shot = state.shots.find(s => s.id === +card.dataset.id);
     card.classList.toggle('selected', state.selection.has(+card.dataset.id));
     card.querySelector('.card-tag').textContent = shot?.style && Object.keys(shot.style).length ? 'Variation' : '';
@@ -650,7 +644,7 @@ function setupBoard() {
   const pointers = new Map();
   let drag = null, pinch = null;
   board.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.text-hit, .screen-add, .add-card, .add-group, .group-head, .card-tools, .card-pose, .row-remove, .inline-editor')) return;
+    if (e.target.closest('.text-hit, .screen-add, .add-screen, .add-group, .group-head, .card-tools, .card-pose, .row-remove, .inline-editor')) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     board.setPointerCapture(e.pointerId);
     if (pointers.size === 2) {
@@ -658,7 +652,7 @@ function setupBoard() {
       pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
       drag = null;
     } else {
-      drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false, card: e.target.closest('.shot-card:not(.add-slot)'), additive: e.shiftKey || e.metaKey };
+      drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false, card: e.target.closest('.shot-card'), additive: e.shiftKey || e.metaKey };
     }
   });
   board.addEventListener('pointermove', (e) => {

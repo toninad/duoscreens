@@ -233,7 +233,7 @@ try {
   check(await page.$$eval('.group[data-device="iphone-air"] .lang-row[data-lang="en"] .shot-card .frame', fs => fs.length) === 1, 'The iPhone group starts with one empty card');
   const half = await exportZip(page, 'devices-half');
   check(Object.keys(half.zip.files).filter(n => n.endsWith('.png')).length === 12, 'Empty iPhone screens are left out of the export');
-  await page.click('.group[data-device="iphone-air"] .add-card');
+  await page.click('.group[data-device="iphone-air"] .add-screen');
   for (const n of [1, 2]) {
     const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click(`.group[data-device="iphone-air"] .lang-row[data-lang="en"] .shot-card:nth-child(${n}) .screen-add`)]);
     await fc.setFiles(fixture);
