@@ -16,15 +16,18 @@ const activeTargets = () => TARGETS.filter(t => state.devices.includes(t.device.
 const targetsOfDevice = (id) => TARGETS.filter(t => t.device.id === id);
 const MAX_SHOTS = 10;   // App Store Connect takes up to 10 screenshots per size
 const groupOf = (shotId) => state.groups.find(g => g.shots.some(s => s.id === shotId));
-const targetsOf = (shot) => targetsOfDevice(groupOf(shot.id)?.device);
-// Each screenshot card has its own orientation per display (iPhones are always portrait).
-const poseOf = (shot, tid) => (targetById(tid).display.poses?.length === 1 ? 'portrait' : shot?.pose?.[tid] || 'portrait');
-const sizeOf = (tid, shot) => targetById(tid).display.size[poseOf(shot, tid)];
+// A screenshot card is one screen: one of its device's displays (the Duo's inner or outer) in an orientation.
+const targetOf = (shot) => targetById(shot.target) || targetsOfDevice(groupOf(shot.id)?.device)[0];
+const targetsOf = (shot) => [targetOf(shot)];
+const countOn = (group, tid) => group.shots.filter(s => targetOf(s).id === tid).length;   // per App Store size, max 10
+// Each card has its own orientation (iPhones are always portrait).
+const poseOf = (shot) => (!shot || targetOf(shot).display.poses?.length === 1 ? 'portrait' : shot.pose || 'portrait');
+const sizeOf = (tid, shot) => targetById(tid).display.size[poseOf(shot)];
 const targetLabel = (t) => t.display.label ? `${t.device.name} · ${t.display.label}` : t.device.name;
 
 const state = {
   // The board: a group per device, each with up to 10 screenshots.
-  // shot = { id, images: { [screen]: img }, variants?, style?: overrides, edited?,
+  // shot = { id, target, pose, images: { [screen]: img }, style?: overrides, edited?,
   //          text: { [lang]: { [screen]: { headline, subheadline } } } }: every screen has its own words
   groups: [],           // { id, device, shots: [shot] }
   get shots() { return this.groups.flatMap(g => g.shots); },
@@ -87,7 +90,7 @@ function renderScreenRows(one) {
     const row = el('label', 'cell row-cell chevron');
     row.innerHTML = '<span></span><span class="value"></span><input type="file" accept="image/png,image/jpeg,image/webp" hidden>';
     row.firstChild.textContent = SCREENS[screen];
-    row.children[1].textContent = !one ? 'Select one screenshot' : one.images?.[screen] ? 'Replace…' : one.variants?.[screen] ? 'Sample capture' : 'Empty';
+    row.children[1].textContent = !one ? 'Select one screenshot' : one.images?.[screen] ? 'Replace…' : 'Empty';
     row.setAttribute('aria-disabled', String(!one));
     row.title = `Choose the capture for the ${SCREENS[screen]}`;
     const input = row.querySelector('input');
@@ -165,17 +168,13 @@ function textFor(shot, lang, screen) {
 const screensOf = (shot) => [...new Set(targetsOf(shot).map(t => t.display.screen))];
 const sameText = (screens, t) => Object.fromEntries(screens.map(sc => [sc, { ...t }]));
 
-// Every screen has its own capture: the one added to it, else a sample capture (in the matching pose
-// when there is one). Null means the screen is still empty and shows the "add screenshot" placeholder.
-function imageFor(shot, screen, pose) {
-  const v = shot.variants?.[screen];
-  return shot.images?.[screen] || v?.[pose] || v?.portrait || v?.landscape || null;
-}
-const hasAnyImage = (shot) => targetsOf(shot).some(t => imageFor(shot, t.display.screen, poseOf(shot, t.id)));
+// The capture on a screen, or null while it still shows the "add screenshot" placeholder.
+const imageFor = (shot, screen) => shot.images?.[screen] || null;
+const hasAnyImage = (shot) => !!imageFor(shot, targetOf(shot).display.screen);
 
 function compositionProps(shot, tid, lang) {
   const t = textFor(shot, lang, targetById(tid).display.screen);
-  const target = targetById(tid), pose = poseOf(shot, tid);
+  const target = targetById(tid), pose = poseOf(shot);
   return {
     image: imageFor(shot, target.display.screen, pose),
     frame: getFrame(target.device.id, state.colors[target.device.id], target.display.id, pose),
@@ -298,7 +297,7 @@ function buildStructure() {
         card.dataset.id = shot.id;
         card.innerHTML = `<header class="card-head"><span class="card-num">${pad2(i + 1)}</span><span class="card-tag"></span><span class="card-pose"></span>
           <span class="card-tools">
-            <button type="button" data-a="dup" title="Duplicate as a variation" aria-label="Duplicate" ${group.shots.length >= MAX_SHOTS ? 'disabled' : ''}>${ICON.dup}</button>
+            <button type="button" data-a="dup" title="Duplicate as a variation" aria-label="Duplicate" ${countOn(group, targetOf(shot).id) >= MAX_SHOTS ? 'disabled' : ''}>${ICON.dup}</button>
             <button type="button" data-a="left" title="Move left" aria-label="Move left" ${i === 0 ? 'disabled' : ''}>${ICON.left}</button>
             <button type="button" data-a="right" title="Move right" aria-label="Move right" ${i === group.shots.length - 1 ? 'disabled' : ''}>${ICON.right}</button>
             <button type="button" data-a="del" title="Remove" aria-label="Remove">${ICON.del}</button>
@@ -310,18 +309,23 @@ function buildStructure() {
           else if (a === 'right') moveShot(shot.id, 1);
           else if (a === 'del') deleteShot(shot.id);
         };
+        // Which display and orientation this card is, shown when it's selected (the Duo has two displays).
         const poseBox = card.querySelector('.card-pose');
-        for (const t of targets.filter(x => !(x.display.poses?.length === 1))) {   // this card's orientation, shown when selected
+        for (const t of targets) {
+          const poses = t.display.poses || ['portrait', 'landscape'];
+          if (targets.length < 2 && poses.length < 2) continue;   // iPhones: one display, always portrait
           const seg = el('div', 'segmented');
           seg.dataset.pose = t.id;
           seg.setAttribute('role', 'group');
-          seg.setAttribute('aria-label', `${t.display.label} display orientation`);
-          for (const v of ['portrait', 'landscape']) {
+          seg.setAttribute('aria-label', `${t.display.label} display`);
+          const full = t.id !== targetOf(shot).id && countOn(group, t.id) >= MAX_SHOTS;
+          for (const v of poses) {
             const b = el('button', '', POSE_ICON[v]);
             b.type = 'button'; b.dataset.v = v; b.setAttribute('aria-label', `${t.display.label} ${v}`);
-            b.title = `${t.display.label}: ${v}, ${t.display.size[v].width} × ${t.display.size[v].height}`;
-            b.setAttribute('aria-pressed', String(poseOf(shot, t.id) === v));
-            b.onclick = (e) => { e.stopPropagation(); shot.pose = { ...shot.pose, [t.id]: v }; renderBoard(); };
+            b.title = full ? `${t.display.label} has its ${MAX_SHOTS} screenshots` : `${t.display.label}, ${v}: ${t.display.size[v].width} × ${t.display.size[v].height}`;
+            b.disabled = full;
+            b.setAttribute('aria-pressed', String(targetOf(shot).id === t.id && poseOf(shot) === v));
+            b.onclick = (e) => { e.stopPropagation(); shot.target = t.id; shot.pose = v; renderBoard(); };
             seg.appendChild(b);
           }
           const l = el('span', 'pose-label');
@@ -329,7 +333,7 @@ function buildStructure() {
           poseBox.append(l, seg);
         }
         const framesEl = card.querySelector('.card-frames');
-        for (const t of targets) {
+        for (const t of targetsOf(shot)) {
           const size = sizeOf(t.id, shot);
           const fr = el('div', 'frame', '<div class="frame-stage"></div><div class="text-hits"></div>');
           fr.dataset.target = t.id;
@@ -345,9 +349,9 @@ function buildStructure() {
           fr.style.height = `${Math.round(size.height * K)}px`;
           const wrap = el('figure', 'frame-wrap');
           wrap.appendChild(fr);
-          if (lang === state.baseLang && targets.length > 1) {
+          if (lang === state.baseLang) {
             const cap = el('figcaption', 'frame-cap');
-            cap.textContent = `${t.display.label} · ${size.width} × ${size.height}`;
+            cap.textContent = `${t.display.label ? t.display.label + ' · ' : ''}${size.width} × ${size.height}`;
             wrap.appendChild(cap);
           }
           framesEl.appendChild(wrap);
@@ -359,7 +363,7 @@ function buildStructure() {
         }
         cards.appendChild(card);
       });
-      if (lang === state.baseLang && group.shots.length < MAX_SHOTS) {   // another screen of this device
+      if (lang === state.baseLang && targets.some(t => countOn(group, t.id) < MAX_SHOTS)) {   // another screen of this device
         const add = el('button', 'add-card', `${PLUS}<span>Add ${device.short || device.name} screen</span>`);
         add.type = 'button';
         add.onclick = () => { group.shots.push(newShot(group)); refresh({ fit: true }); };
@@ -385,7 +389,10 @@ function groupHead(group, device) {
   const head = el('header', 'group-head');
   const title = el('div', 'group-title', '<h2></h2><span class="group-count"></span>');
   title.querySelector('h2').textContent = device.name;
-  title.querySelector('.group-count').textContent = `${group.shots.length} of ${MAX_SHOTS} screenshots`;
+  const targets = targetsOfDevice(device.id);
+  title.querySelector('.group-count').textContent = targets.length > 1
+    ? `${targets.map(t => `${countOn(group, t.id)} ${t.display.label.toLowerCase()}`).join(' · ')} · up to ${MAX_SHOTS} each`
+    : `${group.shots.length} of ${MAX_SHOTS} screenshots`;
   const tools = el('div', 'group-tools');
   const sw = el('span', 'swatches');
   sw.dataset.device = device.id;
@@ -450,7 +457,7 @@ function renderBoard({ fit = false } = {}) {
   const targets = activeTargets();
   $('sizeInfo').textContent = `${targets.length} App Store size${targets.length > 1 ? 's' : ''}`;
   if (!has) return;
-  const key = JSON.stringify([state.groups.map(g => [g.device, g.shots.map(s => [s.id, s.pose])]), state.langs, state.colors, state.licensed]);
+  const key = JSON.stringify([state.groups.map(g => [g.device, g.shots.map(s => [s.id, s.target, s.pose])]), state.langs, state.colors, state.licensed]);
   if (key !== structureKey) { buildStructure(); structureKey = key; requestAnimationFrame(schedulePixelRatio); }
   syncSelectionUI();
   drawAll();
@@ -473,10 +480,11 @@ function clearSelection() {
 
 function duplicateShot(id) {
   const g = groupOf(id);
-  if (g.shots.length >= MAX_SHOTS) return toast(`${deviceById(g.device).name} has its ${MAX_SHOTS} screenshots, the App Store maximum.`);
+  const t = targetOf(g.shots.find(s => s.id === id));
+  if (countOn(g, t.id) >= MAX_SHOTS) return toast(`${targetLabel(t)} has its ${MAX_SHOTS} screenshots, the App Store maximum.`);
   const i = g.shots.findIndex(s => s.id === id);
   const s = g.shots[i];
-  const copy = { ...s, id: nextId++, text: structuredClone(s.text), style: { ...(s.style || {}) }, pose: { ...(s.pose || {}) } };
+  const copy = { ...s, id: nextId++, text: structuredClone(s.text), style: { ...(s.style || {}) } };
   g.shots.splice(i + 1, 0, copy);
   state.selection = new Set([copy.id]);
   refresh();
@@ -703,9 +711,13 @@ const DEFAULT_COPY = [
 
 function newShot(group) {
   const [headline, subheadline] = DEFAULT_COPY[(group?.shots.length || 0) % DEFAULT_COPY.length];
-  const screens = [...new Set(targetsOfDevice(group?.device).map(t => t.display.screen))];
-  const pose = { ...(group?.shots.at(-1)?.pose || {}) };   // a new card starts like the one before it
-  return { id: nextId++, images: {}, pose, text: { [state.baseLang]: sameText(screens, { headline, subheadline }) } };
+  const targets = targetsOfDevice(group?.device);
+  const screens = [...new Set(targets.map(t => t.display.screen))];
+  // A new card starts like the one before it, on a display that still has room.
+  const prev = group?.shots.at(-1);
+  const room = (tid) => !group || countOn(group, tid) < MAX_SHOTS;
+  const target = [prev && targetOf(prev).id, ...targets.map(t => t.id)].find(tid => tid && room(tid));
+  return { id: nextId++, target, pose: prev?.pose || 'portrait', images: {}, text: { [state.baseLang]: sameText(screens, { headline, subheadline }) } };
 }
 
 // The group and screen whose shape is closest to the capture's: a tall capture goes to an iPhone, a
@@ -731,11 +743,11 @@ async function addFiles(files) {
       const img = await loadImage(f);
       const { group, target, pose } = bestScreen(img);
       const screen = target.display.screen;
-      let shot = group.shots.find(s => !imageFor(s, screen, poseOf(s, target.id)));
-      if (!shot && group.shots.length >= MAX_SHOTS) { full++; continue; }
+      // An empty card on that display, else any empty card (it switches display), else a new card.
+      let shot = group.shots.find(s => targetOf(s).id === target.id && !hasAnyImage(s)) || group.shots.find(s => !hasAnyImage(s));
+      if (!shot && countOn(group, target.id) >= MAX_SHOTS) { full++; continue; }
       if (!shot) { shot = newShot(group); group.shots.push(shot); }
-      shot.images = { ...shot.images, [screen]: img };
-      shot.pose = { ...shot.pose, [target.id]: pose };   // the capture's own orientation
+      Object.assign(shot, { target: target.id, pose, images: { ...shot.images, [screen]: img } });   // the capture's own display and orientation
     } catch (e) { toast(e.message); }
   }
   refresh({ fit: true });
@@ -763,19 +775,17 @@ const loadUrl = (src) => new Promise((resolve) => {
 });
 
 // Loads the real sample captures; returns [] if they aren't in the repo, so the generated sample is used.
+// A card per capture, on the display and in the orientation it was taken in (inner cards first).
 async function loadSampleShots() {
-  const shots = [];
-  for (const s of SAMPLE_SHOTS) {
-    const variants = {};
-    for (const [screen, poses] of Object.entries(s.captures)) {
-      variants[screen] = {};
-      for (const [pose, src] of Object.entries(poses)) variants[screen][pose] = await loadUrl(src);
-    }
-    if (!Object.values(variants).some(v => Object.values(v).some(Boolean))) return [];
-    shots.push({ id: nextId++, images: {}, variants, pose: { 'duo/inner': 'landscape' },   // captured unfolded, in landscape
-      text: { [state.baseLang]: sameText(['duo/inner', 'duo/outer'], { headline: s.headline, subheadline: s.subheadline }) } });
+  const shots = [], seen = new Set();
+  for (const s of SAMPLE_SHOTS) for (const [screen, poses] of Object.entries(s.captures)) for (const [pose, src] of Object.entries(poses)) {
+    if (seen.has(src)) continue;
+    seen.add(src);
+    const img = await loadUrl(src);
+    if (img) shots.push({ id: nextId++, target: screen, pose, images: { [screen]: img },
+      text: { [state.baseLang]: sameText([screen], { headline: s.headline, subheadline: s.subheadline }) } });
   }
-  return shots;
+  return shots.sort((a, b) => (a.target === b.target ? 0 : a.target === 'duo/inner' ? -1 : 1));
 }
 
 function setupDropzone() {
@@ -797,7 +807,7 @@ function setupDropzone() {
       if (!g) { g = newGroup('duo'); g.shots = []; state.groups.push(g); }
       await loadFrame('duo', state.colors.duo);
       // The captures were taken unfolded in landscape, so show the inner display that way.
-      g.shots = [...g.shots.filter(x => hasAnyImage(x) || x.edited), ...shots].slice(0, MAX_SHOTS);   // samples replace untouched empty cards
+      g.shots = [...g.shots.filter(x => hasAnyImage(x) || x.edited), ...shots];   // samples replace untouched empty cards
       saveDevicePrefs();
       return refresh({ fit: true });
     }
@@ -926,7 +936,7 @@ async function confirmDevice() {
     const g = state.groups.find(x => x.id === picker.groupId);
     if (g.device !== id) {
       g.device = id;
-      for (const s of g.shots) { s.images = {}; delete s.variants; }   // captures belong to the old device's screens
+      for (const s of g.shots) { s.images = {}; delete s.target; s.pose = 'portrait'; }   // captures belong to the old device's screens
     }
   } else if (picker.mode === 'first') {
     state.groups = [newGroup(id)];
@@ -1156,7 +1166,7 @@ async function exportZip() {
   let skipped = 0;
   const count = {};   // numbered per folder, so skipped empty frames leave no gaps
   for (const lang of state.langs) state.shots.forEach(s => targetsOf(s).forEach(t => {
-    if (imageFor(s, t.display.screen, poseOf(s, t.id))) jobs.push({ lang, s, i: (count[lang + t.id] = (count[lang + t.id] || 0) + 1) - 1, t });
+    if (imageFor(s, t.display.screen)) jobs.push({ lang, s, i: (count[lang + t.id] = (count[lang + t.id] || 0) + 1) - 1, t });
     else if (lang === state.baseLang) skipped++;
   }));
   if (!jobs.length) { btn.disabled = false; return toast('Add a screenshot to a frame first.'); }

@@ -92,7 +92,7 @@ try {
   await page.waitForFunction(() => window.__dss.state.devices.join() === 'duo');
   check(true, 'Continue makes an iPhone Duo group');
   check(!!(await page.$('.add-group .pro-tag')), 'Free: adding a second device asks for Pro');
-  check(await page.$$eval('.shot-card .screen-add', bs => bs.length) === 2, 'The board starts with an empty card: an "add screenshot" screen per frame');
+  check(await page.$$eval('.shot-card .screen-add', bs => bs.length) === 1, 'The board starts with one empty screen to fill');
 
   // Make a sample screenshot file using the app's own generator and save it as a fixture.
   const b64 = await page.evaluate(async () => {
@@ -108,15 +108,12 @@ try {
   // the generated sample (2007 × 2853) to the inner display, the cover capture to the outer.
   await page.setInputFiles('#fileInput', [fixture, fixture]);
   await page.waitForFunction(() => window.__dss.state.shots.length === 2);
-  check(await page.evaluate(() => window.__dss.state.shots.every(s => Object.keys(s.images).join() === 'duo/inner')), 'Inner-shaped captures fill the inner display of each card');
+  check(await page.evaluate(() => window.__dss.state.shots.every(s => s.target === 'duo/inner')), 'Inner-shaped captures become inner-display screens');
   const cover = path.join(root, 'samples', 'outer-portrait-home.webp');
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('.shot-card:first-child .frame[data-display="outer"] .screen-add')]);
-  await chooser.setFiles(cover);
-  await page.waitForFunction(() => window.__dss.state.shots[0].images['duo/outer']);
-  check(true, 'Clicking an empty screen adds a capture to just that frame');
-  await page.setInputFiles('#fileInput', [cover]);
-  await page.waitForFunction(() => window.__dss.state.shots[1].images['duo/outer']);
-  check(await page.$$eval('.shot-card .screen-add', bs => bs.length) === 0, 'Uploaded captures for both displays of 2 screenshots');
+  await page.setInputFiles('#fileInput', [cover, cover]);
+  await page.waitForFunction(() => window.__dss.state.shots.length === 4);
+  check(await page.evaluate(() => window.__dss.state.shots.map(s => s.target).join()) === 'duo/inner,duo/inner,duo/outer,duo/outer', 'Cover captures become outer-display screens, one card each');
+  check(await page.$$eval('.shot-card .screen-add', bs => bs.length) === 0, 'Every screen has its capture');
 
   // Edit headline of screenshot 1
   // Edit text inline: click the headline on the inner preview, type, then Tab to the subheadline.
@@ -181,7 +178,7 @@ try {
   await page.check('#langChecks input[value="ja"]');
   await page.click('#translateBtn');
   await page.waitForFunction(() => ['de', 'ja'].every(l => window.__dss.state.langs.includes(l)));
-  const deText = await page.evaluate(() => window.__dss.state.shots[1].text.de['duo/outer'].headline);
+  const deText = await page.evaluate(() => window.__dss.state.shots[1].text.de['duo/inner'].headline);
   check(deText === 'Mach da weiter, wo du aufgehört hast', `Translation applied: "${deText}"`);
   await page.keyboard.press('Escape');
   check(await page.$$eval('.lang-row', rs => rs.map(r => r.dataset.lang).join()) === 'en,de,ja', 'Board shows a row per language');
@@ -202,10 +199,9 @@ try {
 
   // Landscape poses export Apple's landscape sizes, in both finishes.
   // Orientation is per screenshot: select a card and pick it for each display in its header.
-  for (const n of [1, 2]) {
+  for (const n of [1, 2, 3, 4]) {
     await page.click(`.shot-card:nth-child(${n}) .card-num`);
-    await page.click(`.shot-card:nth-child(${n}) .segmented[data-pose="duo/inner"] [data-v="landscape"]`);
-    await page.click(`.shot-card:nth-child(${n}) .segmented[data-pose="duo/outer"] [data-v="landscape"]`);
+    await page.click(`.shot-card:nth-child(${n}) .segmented[data-pose="duo/${n <= 2 ? 'inner' : 'outer'}"] [data-v="landscape"]`);
   }
   await page.keyboard.press('Escape');
   const finishes = await page.$$eval('.swatches[data-device="duo"] button', bs => bs.map(b => b.dataset.color));
@@ -252,12 +248,12 @@ try {
   // Variations: duplicate the second screenshot, restyle only the copy.
   await page.click('.lang-row[data-lang="en"] .shot-card:nth-child(2) .card-num');
   await page.click('.lang-row[data-lang="en"] .shot-card:nth-child(2) [data-a="dup"]');
-  await page.waitForFunction(() => window.__dss.state.groups[0].shots.length === 3);
+  await page.waitForFunction(() => window.__dss.state.groups[0].shots.length === 5);
   check((await page.textContent('#scopeLabel')) === 'iPhone Duo 3', 'The copy is selected and the dock scopes to it');
   await page.click('[data-template="ink"]');
   const styles = await page.evaluate(() => window.__dss.state.shots.map(s => s.style?.bg1 || 'base'));
   check(styles[0] === 'base' && styles[1] === 'base' && styles[2] !== 'base', 'Theme applies to the selected variation only');
-  check(await page.$$eval('.group[data-device="duo"] .lang-row[data-lang="de"] .shot-card', cs => cs.length) === 3, 'Variation appears in every language row');
+  check(await page.$$eval('.group[data-device="duo"] .lang-row[data-lang="de"] .shot-card', cs => cs.length) === 5, 'Variation appears in every language row');
   await page.click('#zoomFit');
   await page.waitForTimeout(400);
   await page.screenshot({ path: path.join(out, 'board.png') });
