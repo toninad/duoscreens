@@ -94,6 +94,7 @@ try {
   await page.click('[data-template="midnight"]');
 
   // Translate (mocked endpoint)
+  await page.click('#translateDetails summary');
   await page.selectOption('#translateTarget', 'de');
   await page.click('#translateBtn');
   await page.waitForFunction(() => window.__dss.state.langs.includes('de'));
@@ -110,6 +111,7 @@ try {
   const freePngs = await verifyZip(free.zip, 'free', 8);
 
   // Unlock with dev key, export again
+  await page.click('#licenseDetails summary');
   await page.fill('#licenseKey', 'not-a-real-key');
   await page.click('#licenseBtn');
   check(!(await page.evaluate(() => window.__dss.state.licensed)), 'Invalid key stays locked');

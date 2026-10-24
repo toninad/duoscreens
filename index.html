@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
   <title>Duo Screenshot Studio — App Store screenshots for iPhone Duo</title>
   <meta name="description" content="Turn your app screenshots into App Store-ready iPhone Duo screenshots for the inner and outer display. Runs in your browser; images never leave your device.">
   <link rel="stylesheet" href="src/styles.css">
@@ -13,7 +14,7 @@
       <span class="logo" aria-hidden="true"><i></i><i></i></span>
       <div>
         <strong>Duo Screenshot Studio</strong>
-        <small>App Store screenshots for iPhone Duo · images never leave your device</small>
+        <small>iPhone Duo App Store screenshots · images stay on your device</small>
       </div>
     </div>
     <div class="topbar-actions">
@@ -29,7 +30,7 @@
         <span class="dz-icon">＋</span>
         <span><strong>Drop screenshots</strong><br><small>or click to choose · PNG / JPEG</small></span>
       </label>
-      <button id="sampleBtn" class="btn ghost small">Try with a sample screenshot</button>
+      <button id="sampleBtn" class="btn ghost small">Try a sample screenshot</button>
       <ol id="shotList" class="shot-list" aria-label="Screenshots"></ol>
     </aside>
 
@@ -85,23 +86,23 @@
         <label class="field">Font <select id="fontSelect"></select></label>
       </section>
 
-      <section>
-        <h2>Translate headlines</h2>
+      <details id="translateDetails">
+        <summary>Translate headlines</summary>
         <div class="row">
           <select id="translateTarget"></select>
           <button id="translateBtn" class="btn small">Translate</button>
         </div>
         <p id="translateStatus" class="hint"></p>
-      </section>
+      </details>
 
-      <section>
-        <h2>License</h2>
+      <details id="licenseDetails">
+        <summary>License</summary>
         <div class="row">
           <input id="licenseKey" type="text" placeholder="Lemon Squeezy license key" autocomplete="off" spellcheck="false">
           <button id="licenseBtn" class="btn small">Unlock</button>
         </div>
         <p id="licenseStatus" class="hint">Free exports include a small watermark. <a id="buyLink" href="#">Get a license</a> — €19 per app or €49 lifetime.</p>
-      </section>
+      </details>
     </aside>
   </main>
 

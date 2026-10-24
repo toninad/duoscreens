@@ -119,8 +119,12 @@ function ensurePreviewStages() {
 
 function previewScale() {
   const wrap = document.querySelector('.stage-wrap');
-  const availH = Math.max(320, wrap.clientHeight - 90);
-  const availW = Math.max(320, wrap.clientWidth - 100);
+  const cs = getComputedStyle(wrap);
+  const gap = parseFloat(getComputedStyle($('previews')).columnGap) || 0;
+  const availW = Math.max(200, wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - gap);
+  // on narrow screens the stage grows with its content, so cap by the viewport instead
+  const narrow = matchMedia('(max-width: 860px)').matches;
+  const availH = Math.max(200, narrow ? window.innerHeight * 0.55 : wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 40);
   const inner = sizeOf('inner'), outer = sizeOf('outer');
   // both previews share the same pixel scale so their relative size is honest
   return Math.min(availH / inner.height, availW / (inner.width + outer.width));
