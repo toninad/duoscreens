@@ -38,8 +38,8 @@ export const TRANSLATE_ENDPOINT = `${API_BASE}/api/translate`;
 /** Pro is a one-time purchase on Polar, which emails a license key after checkout. */
 export const PRO = {
   price: '€15.99',
-  // TODO: the Polar checkout link for the Pro product (Polar > Products > Checkout links).
-  checkoutUrl: '',
+  // Polar checkout link for the Pro product; returns to /?checkout=success after payment.
+  checkoutUrl: 'https://buy.polar.sh/polar_cl_XygCp6D91TvJ2TL3WeErfvJRQ1XhWAPxMtu9o1VC2AO',
 };
 
 export const WATERMARK_TEXT = 'Made with Duo Screenshot Studio';
