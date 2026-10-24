@@ -212,18 +212,29 @@ input[type=range]::-moz-range-progress { height: 4px; border-radius: 4px; backgr
 input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -9px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 .5px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.18); }
 input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 0 0 .5px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.18); }
 
-/* Templates */
-.template-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+/* Layouts and themes */
+.layout-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.layout-grid button {
+  aspect-ratio: 1.25; border: 0; padding: 0; border-radius: 9px; cursor: pointer; background: var(--fill);
+  display: grid; place-items: center; transition: box-shadow .25s var(--ease), background .2s;
+}
+.layout-grid button:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+.layout-grid svg { width: 78%; height: auto; overflow: hidden; border-radius: 4px; }
+.layout-grid .dev { fill: var(--card); stroke: var(--ink); stroke-width: 1.3; }
+.layout-grid .txt { stroke: var(--muted); stroke-width: 1.6; stroke-linecap: round; fill: none; }
+.layout-grid button[aria-pressed=true] { background: var(--card); box-shadow: 0 0 0 1.5px var(--orange); }
+.layout-grid button[aria-pressed=true] .txt { stroke: var(--orange); }
+
+.template-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .template-grid button {
-  aspect-ratio: .7; border-radius: 9px; border: 0; cursor: pointer; position: relative; padding: 0; overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); transition: transform .25s var(--ease), box-shadow .25s;
+  height: 64px; border-radius: 10px; border: 0; cursor: pointer; padding: 8px 10px; position: relative;
+  display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; text-align: left;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.07); transition: transform .25s var(--ease), box-shadow .25s;
 }
 .template-grid button:hover { transform: translateY(-1px); }
-.template-grid button.active { box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--orange); }
-.template-grid button::after { content: ''; position: absolute; left: 32%; right: 32%; top: 40%; bottom: 0; border-radius: 4px 4px 0 0; background: rgba(0,0,0,.4); }
-.template-grid button span { position: absolute; left: 0; right: 0; top: 14%; font: 600 8.5px/1 var(--sans); letter-spacing: .02em; text-align: center; }
-.template-grid button.bottom::after { top: 0; bottom: 40%; border-radius: 0 0 4px 4px; }
-.template-grid button.bottom span { top: auto; bottom: 14%; }
+.template-grid button[aria-pressed=true] { box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--orange); }
+.template-grid .aa { font-size: 22px; line-height: 1; letter-spacing: -0.02em; }
+.template-grid .name { font: 600 11px/1 var(--sans); opacity: .7; letter-spacing: .01em; }
 
 /* Device: segmented control and finish swatches */
 .segmented { display: inline-flex; padding: 2px; border-radius: 9px; background: var(--fill); flex: none; }
@@ -295,7 +306,6 @@ details[open] summary { margin-bottom: 12px; }
   .row-cell { min-height: 50px; }
   input[type=range] { width: 160px; }
   .stacked textarea, .inline select, .inline input[type=text] { font-size: 16px; } /* avoids iOS zoom on focus */
-  .template-grid button span { font-size: 9.5px; }
 }
 @media (max-width: 380px) { .brand-title { display: none; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

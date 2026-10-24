@@ -1,49 +1,28 @@
-// Templates: a template is a set of default style values plus layout choices.
-// Users can override colors and font; layout comes from the template.
+// Themes and layouts are separate: a theme is the look (ground, ink, type), a layout is where the
+// device and the text go. Users can still override colors and font after picking a theme.
 
 export const FONTS = {
-  inter:   { label: 'Inter (clean sans)',   family: 'Inter',            headlineStyle: '800', subStyle: '400' },
-  grotesk: { label: 'Space Grotesk (tech)', family: 'Space Grotesk',    headlineStyle: '700', subStyle: '500' },
-  serif:   { label: 'DM Serif Display',     family: 'DM Serif Display', headlineStyle: 'normal', subStyle: '400', subFamily: 'Inter' },
-  system:  { label: 'System UI',            family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif', headlineStyle: '700', subStyle: '400' },
+  serif:  { label: 'Source Serif', family: 'Source Serif 4', headlineStyle: '500', subFamily: 'Source Sans 3', subStyle: '400', tracking: -0.012 },
+  sans:   { label: 'Inter', family: 'Inter', headlineStyle: '600', subStyle: '400', tracking: -0.022 },
+  system: { label: 'System', family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif', headlineStyle: '600', subStyle: '400', tracking: -0.015 },
 };
 
+// Grounds are flat or carry only a whisper of tone from top to bottom.
 export const TEMPLATES = [
-  {
-    id: 'midnight', name: 'Midnight',
-    bg1: '#0b1026', bg2: '#4c1d95', angle: 160,
-    blobs: [ { x: 0.15, y: 0.18, r: 0.55, color: '#7c3aed' }, { x: 0.95, y: 0.85, r: 0.6, color: '#0891b2' } ],
-    textColor: '#ffffff', font: 'inter',
-    textPos: 'top', device: 'frame', fit: 'fit',
-  },
-  {
-    id: 'sunrise', name: 'Sunrise',
-    bg1: '#ff8a4c', bg2: '#ff2e7e', angle: 200,
-    blobs: [ { x: 0.85, y: 0.1, r: 0.5, color: '#ffd166' } ],
-    textColor: '#ffffff', font: 'inter',
-    textPos: 'top', device: 'frame', fit: 'bleed',
-  },
-  {
-    id: 'paper', name: 'Paper',
-    bg1: '#f6f3ec', bg2: '#ece6d8', angle: 180,
-    blobs: [],
-    textColor: '#1c1917', font: 'serif',
-    textPos: 'top', device: 'rounded', fit: 'fit',
-  },
-  {
-    id: 'cobalt', name: 'Cobalt',
-    bg1: '#2563eb', bg2: '#1e3a8a', angle: 180,
-    blobs: [ { x: 0.5, y: 0.35, r: 0.7, color: '#60a5fa' } ],
-    textColor: '#ffffff', font: 'grotesk',
-    textPos: 'bottom', device: 'frame', fit: 'bleed',
-  },
-  {
-    id: 'mint', name: 'Mint',
-    bg1: '#ecfdf5', bg2: '#a7f3d0', angle: 150,
-    blobs: [ { x: 0.1, y: 0.9, r: 0.55, color: '#6ee7b7' }, { x: 0.9, y: 0.12, r: 0.4, color: '#ffffff' } ],
-    textColor: '#064e3b', font: 'grotesk',
-    textPos: 'top', device: 'rounded', fit: 'bleed',
-  },
+  { id: 'paper', name: 'Paper', bg1: '#F2EEEA', bg2: '#E8E2DC', textColor: '#121212', font: 'serif' },
+  { id: 'ink',   name: 'Ink',   bg1: '#1A1918', bg2: '#100F0E', textColor: '#F2EEEA', font: 'serif' },
+  { id: 'night', name: 'Night', bg1: '#1B2740', bg2: '#101827', textColor: '#EDF1F7', font: 'sans' },
+  { id: 'sage',  name: 'Sage',  bg1: '#DFE5DC', bg2: '#D2DACE', textColor: '#1C261E', font: 'serif' },
+  { id: 'mist',  name: 'Mist',  bg1: '#E7EAEF', bg2: '#DADFE7', textColor: '#131820', font: 'sans' },
+  { id: 'clay',  name: 'Clay',  bg1: '#E4582A', bg2: '#D94C1F', textColor: '#FFF6F0', font: 'sans' },
+];
+
+export const LAYOUTS = [
+  { id: 'peek-left',  name: 'Peek from left' },    // device cut by the left edge, text on the right
+  { id: 'peek-right', name: 'Peek from right' },   // mirror
+  { id: 'top',        name: 'Text on top' },       // whole device under the text
+  { id: 'rise',       name: 'Rise from bottom' },  // device runs off the bottom edge
+  { id: 'drop',       name: 'Drop from top' },     // device runs off the top edge, text below
 ];
 
 export function templateById(id) {

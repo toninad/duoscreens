@@ -8,17 +8,6 @@ function hexToRgba(hex, a) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
-function gradientPoints(w, h, angleDeg) {
-  // CSS-like angle: 180 = top -> bottom
-  const a = (angleDeg - 90) * Math.PI / 180;
-  const cx = w / 2, cy = h / 2;
-  const len = Math.abs(w * Math.cos(a)) / 2 + Math.abs(h * Math.sin(a)) / 2;
-  return {
-    start: { x: cx - Math.cos(a) * len, y: cy - Math.sin(a) * len },
-    end:   { x: cx + Math.cos(a) * len, y: cy + Math.sin(a) * len },
-  };
-}
-
 // Rounded rectangle with a radius per corner, clockwise from top-left.
 function roundedClip4(x, y, w, h, [tl, tr, br, bl]) {
   return (ctx) => {
@@ -53,83 +42,121 @@ function roundedClip(w, h, r) {
 }
 
 /**
+ * Where the device goes for each layout. Returns the device box and the text column.
+ * Portrait canvases have no room beside the device, so "peek" layouts put the text on top and let
+ * the device run off the side and the bottom instead.
+ */
+function place(layout, w, h, aspect, measureText) {
+  const land = w > h;
+  const pad = Math.min(w, h) * 0.085;
+  const gap = Math.min(w, h) * 0.05;
+  const fitW = (boxW, boxH) => (boxW / boxH > aspect ? { dw: boxH * aspect, dh: boxH } : { dw: boxW, dh: boxW / aspect });
+
+  if (layout === 'peek-left' || layout === 'peek-right') {
+    const left = layout === 'peek-left';
+    if (land) {
+      // Device fills most of the height and is cut by the side edge; text sits in the free column.
+      const dh = h * 0.8, dw = dh * aspect;
+      const visible = Math.min(dw * 0.84, w * 0.6);
+      const dx = left ? visible - dw : w - visible;
+      const colX = left ? visible + gap * 1.6 : pad * 1.1;
+      const colW = w - visible - gap * 1.6 - pad * 1.1;
+      const t = measureText(colW, 'left', 1.05);
+      return { dx, dy: (h - dh) / 2, dw, dh, tx: colX, ty: (h - t) / 2, tw: colW, align: 'left', scale: 1.05 };
+    }
+    const tw = w - pad * 2;
+    const t = measureText(tw, 'left', 1);
+    const dw = w * 0.9, dh = dw / aspect;
+    const ty = h * 0.075, top = ty + t + gap * 1.6;
+    return { dx: left ? -w * 0.16 : w * 0.26, dy: top, dw, dh, tx: pad, ty, tw, align: 'left', scale: 1 };
+  }
+
+  const tw = (land ? w * 0.62 : w) - pad * 2;
+  const tx = (w - tw) / 2;
+  const t = measureText(tw, 'center', 1);
+  const ty = h * (land ? 0.08 : 0.07);
+
+  if (layout === 'top') {
+    const top = ty + t + gap * 1.4, bottom = h - h * 0.06;
+    const { dw, dh } = fitW(w * (land ? 0.8 : 0.86), bottom - top);
+    return { dx: (w - dw) / 2, dy: top + (bottom - top - dh) / 2, dw, dh, tx, ty, tw, align: 'center', scale: 1 };
+  }
+  if (layout === 'drop') {
+    const tyB = h - h * 0.075 - t;
+    const avail = tyB - gap * 1.4;
+    let dh = avail / 0.8, dw = dh * aspect;
+    if (dw > w * (land ? 0.82 : 0.96)) { dw = w * (land ? 0.82 : 0.96); dh = dw / aspect; }
+    return { dx: (w - dw) / 2, dy: avail - dh, dw, dh, tx, ty: tyB, tw, align: 'center', scale: 1 };
+  }
+  // rise (default): device starts under the text and runs off the bottom edge
+  const top = ty + t + gap * 1.4;
+  let dh = (h - top) / 0.8, dw = dh * aspect;
+  if (dw > w * (land ? 0.82 : 0.96)) { dw = w * (land ? 0.82 : 0.96); dh = dw / aspect; }
+  return { dx: (w - dw) / 2, dy: top, dw, dh, tx, ty, tw, align: 'center', scale: 1 };
+}
+
+/**
  * @param {Konva.Layer} layer
  * @param {{width:number,height:number}} size  exact export size
  * @param {object} p  { image, frame, headline, subheadline, style, watermark, watermarkText }
- *   frame = { img, geo } from frames.js, used by templates with device: 'frame' 
- *   style = { template, bg1, bg2, angle, textColor, font, headlineScale }
+ *   style = { template, layout, bg1, bg2, textColor, font, headlineScale }
+ *   frame = { img, geo } from frames.js
  */
 export function buildComposition(layer, size, p) {
   const { width: w, height: h } = size;
-  const t = p.style.template;
   const st = p.style;
-  const font = FONTS[st.font] || FONTS.inter;
+  const font = FONTS[st.font] || FONTS.serif;
   layer.destroyChildren();
 
-  // Background (always fully opaque — App Store rejects transparency)
-  const g = gradientPoints(w, h, st.angle ?? t.angle);
+  // Ground: always fully opaque (App Store rejects transparency), at most a faint vertical tone.
   layer.add(new Konva.Rect({
     x: 0, y: 0, width: w, height: h,
-    fillLinearGradientStartPoint: g.start, fillLinearGradientEndPoint: g.end,
+    fillLinearGradientStartPoint: { x: 0, y: 0 }, fillLinearGradientEndPoint: { x: 0, y: h },
     fillLinearGradientColorStops: [0, st.bg1, 1, st.bg2],
   }));
-  for (const b of t.blobs || []) {
-    const r = b.r * w;
-    layer.add(new Konva.Circle({
-      x: b.x * w, y: b.y * h, radius: r, opacity: 0.55,
-      fillRadialGradientStartRadius: 0, fillRadialGradientEndRadius: r,
-      fillRadialGradientColorStops: [0, hexToRgba(b.color, 0.9), 1, hexToRgba(b.color, 0)],
-      listening: false,
-    }));
-  }
 
-  // Text block. Type scales with the shorter side so landscape canvases don't get oversized text.
+  // Text: sized from the shorter side so landscape canvases stay balanced.
   const base = Math.min(w, h * 0.85);
-  const pad = w * 0.08;
-  const scale = st.headlineScale || 1;
-  const headline = new Konva.Text({
-    x: pad, width: w - pad * 2, align: 'center',
-    text: p.headline || '', fontFamily: font.family, fontStyle: font.headlineStyle,
-    fontSize: Math.round(base * 0.074 * scale), lineHeight: 1.08, fill: st.textColor,
-    letterSpacing: font.family === 'Inter' ? -base * 0.0012 : 0,
-  });
-  const sub = new Konva.Text({
-    x: pad * 1.25, width: w - pad * 2.5, align: 'center',
-    text: p.subheadline || '', fontFamily: font.subFamily || font.family, fontStyle: font.subStyle,
-    fontSize: Math.round(base * 0.037 * scale), lineHeight: 1.3, fill: hexToRgba(st.textColor, 0.78),
-  });
-  const gapHS = p.subheadline ? base * 0.025 : 0;
-  const textH = headline.height() + gapHS + (p.subheadline ? sub.height() : 0);
-  const margin = h * 0.065;
-  const textTop = t.textPos === 'bottom' ? h - margin - textH : margin;
-  headline.y(textTop);
-  sub.y(textTop + headline.height() + gapHS);
-
-  // Device / screenshot placement
-  const img = p.image;
-  if (img) {
-    const frame = t.device === 'frame' ? p.frame : null;
-    const aspect = frame ? frame.geo.w / frame.geo.h : img.width / img.height;
-    const gap = h * 0.045;
-    const maxW = w * (t.device === 'frame' ? 0.74 : 0.72);
-    let areaTop, areaBottom;
-    if (t.textPos === 'bottom') { areaTop = margin * 0.8; areaBottom = textTop - gap; }
-    else { areaTop = textTop + textH + gap; areaBottom = h - margin * 0.8; }
-    const areaH = areaBottom - areaTop;
-
-    let dw, dh;
-    if (t.fit === 'bleed') {
-      // Big device that runs off the canvas edge (if the screenshot is tall enough).
-      dw = Math.min(w * 0.70, h * 0.78 * aspect); dh = dw / aspect;
-    } else {
-      dw = Math.min(maxW, areaH * aspect); dh = dw / aspect;
+  const userScale = st.headlineScale || 1;
+  const makeText = (width, align, scale) => {
+    const hs = Math.round(base * 0.078 * scale * userScale);
+    const ss = Math.round(base * 0.033 * scale * userScale);
+    const headline = new Konva.Text({
+      width, align, text: p.headline || '', fontFamily: font.family, fontStyle: font.headlineStyle,
+      fontSize: hs, lineHeight: 1.1, fill: st.textColor, letterSpacing: hs * font.tracking,
+    });
+    const sub = new Konva.Text({
+      width, align, text: p.subheadline || '', fontFamily: font.subFamily || font.family, fontStyle: font.subStyle,
+      fontSize: ss, lineHeight: 1.38, fill: hexToRgba(st.textColor, 0.78), letterSpacing: ss * -0.005,
+    });
+    // Balance the headline like CSS text-wrap: balance, so it never ends on a lone word:
+    // the narrowest width that keeps the same number of lines, aligned within the column.
+    const lines = headline.textArr.length;
+    if (lines > 1) {
+      let lo = width * 0.4, hi = width;
+      for (let i = 0; i < 10; i++) {
+        const mid = (lo + hi) / 2;
+        headline.width(mid);
+        if (headline.textArr.length > lines) lo = mid; else hi = mid;
+      }
+      headline.width(Math.ceil(hi) + 1);
+      headline.offsetX(align === 'center' ? -(width - headline.width()) / 2 : 0);
     }
-    const dx = (w - dw) / 2;
-    let dy;
-    if (t.fit === 'bleed') dy = t.textPos === 'bottom' ? areaBottom - dh : areaTop;
-    else dy = t.textPos === 'bottom' ? areaBottom - dh : areaTop + (areaH - dh) / 2;
+    const gapHS = p.subheadline ? hs * 0.42 : 0;
+    return { headline, sub, gapHS, height: headline.height() + gapHS + (p.subheadline ? sub.height() : 0) };
+  };
+  const img = p.image;
+  const frame = p.frame;
+  const aspect = frame ? frame.geo.w / frame.geo.h : img ? img.width / img.height : 0.7;
+  const L = place(st.layout || 'peek-left', w, h, aspect, (tw, align, scale) => makeText(tw, align, scale).height);
+  const text = makeText(L.tw, L.align, L.scale);
+  text.headline.position({ x: L.tx, y: L.ty });
+  text.sub.position({ x: L.tx, y: L.ty + text.headline.height() + text.gapHS });
 
-    const short = Math.min(dw, dh);
+  // Device
+  if (img) {
+    const { dx, dy, dw, dh } = L;
+    const shadow = { shadowColor: '#000', shadowBlur: base * 0.05, shadowOpacity: 0.22, shadowOffsetY: base * 0.018 };
     if (frame) {
       const { geo } = frame;
       const k = dw / geo.w;
@@ -138,10 +165,7 @@ export function buildComposition(layer, size, p) {
       const radii = geo.radii.map(r => r * k);
       // Shadow cast by the frame image itself, so it follows the real device outline. The part that
       // falls inside the see-through screen is covered by the screenshot drawn next.
-      layer.add(new Konva.Image({
-        image: frame.img, x: dx, y: dy, width: dw, height: dh,
-        shadowColor: '#000', shadowBlur: base * 0.06, shadowOpacity: 0.32, shadowOffsetY: base * 0.022,
-      }));
+      layer.add(new Konva.Image({ image: frame.img, x: dx, y: dy, width: dw, height: dh, ...shadow }));
       // Screenshot fills the screen opening; the frame on top covers the edges and adds the camera.
       const bleed = 3 * k;
       const scr = new Konva.Group({ clipFunc: roundedClip4(sx - bleed, sy - bleed, sw + bleed * 2, sh + bleed * 2, radii.map(r => r + bleed)) });
@@ -149,40 +173,22 @@ export function buildComposition(layer, size, p) {
       scr.add(new Konva.Image({ image: img, x: sx - bleed, y: sy - bleed, width: sw + bleed * 2, height: sh + bleed * 2, crop: coverCrop(img, sw, sh) }));
       layer.add(scr);
       layer.add(new Konva.Image({ image: frame.img, x: dx, y: dy, width: dw, height: dh }));
-    } else if (t.device === 'frame') {
-      const bezel = short * 0.032;
-      const outerR = short * 0.12;
-      layer.add(new Konva.Rect({
-        x: dx - bezel, y: dy - bezel, width: dw + bezel * 2, height: dh + bezel * 2,
-        cornerRadius: outerR + bezel, fill: '#0a0a0c',
-        stroke: 'rgba(255,255,255,0.18)', strokeWidth: Math.max(2, bezel * 0.18),
-        shadowColor: '#000', shadowBlur: w * 0.06, shadowOpacity: 0.35, shadowOffsetY: w * 0.02,
-      }));
-      const grp = new Konva.Group({ x: dx, y: dy, clipFunc: roundedClip(dw, dh, outerR) });
-      grp.add(new Konva.Image({ image: img, width: dw, height: dh }));
-      layer.add(grp);
     } else {
-      const r = short * 0.07;
-      layer.add(new Konva.Rect({
-        x: dx, y: dy, width: dw, height: dh, cornerRadius: r, fill: '#fff',
-        shadowColor: '#000', shadowBlur: w * 0.05, shadowOpacity: 0.22, shadowOffsetY: w * 0.018,
-      }));
+      // No frame available: a rounded screen.
+      const r = Math.min(dw, dh) * 0.06;
+      layer.add(new Konva.Rect({ x: dx, y: dy, width: dw, height: dh, cornerRadius: r, fill: '#000', ...shadow }));
       const grp = new Konva.Group({ x: dx, y: dy, clipFunc: roundedClip(dw, dh, r) });
-      grp.add(new Konva.Image({ image: img, width: dw, height: dh }));
+      grp.add(new Konva.Image({ image: img, width: dw, height: dh, crop: coverCrop(img, dw, dh) }));
       layer.add(grp);
-      layer.add(new Konva.Rect({
-        x: dx, y: dy, width: dw, height: dh, cornerRadius: r,
-        stroke: 'rgba(0,0,0,0.08)', strokeWidth: Math.max(2, w * 0.0015),
-      }));
     }
   }
 
-  // Text on top of device (so bleed layouts never hide the headline)
-  layer.add(headline);
-  if (p.subheadline) layer.add(sub);
+  // Text on top of the device, so bleed layouts never hide the headline
+  layer.add(text.headline);
+  if (p.subheadline) layer.add(text.sub);
 
   if (p.watermark) {
-    const fs = Math.round(base * 0.021);
+    const fs = Math.round(base * 0.019);
     const label = new Konva.Label({ opacity: 0.9 });
     label.add(new Konva.Tag({ fill: 'rgba(0,0,0,0.55)', cornerRadius: fs }));
     label.add(new Konva.Text({ text: p.watermarkText, fontFamily: 'Inter', fontStyle: '600', fontSize: fs, padding: fs * 0.6, fill: '#ffffff' }));

@@ -1,7 +1,7 @@
 /* global Konva, JSZip */
 import { DUO_SIZES, LICENSE, WATERMARK_TEXT, LANGUAGES } from './config.js';
 import { DEVICE_COLORS, loadFrames, getFrame } from './frames.js';
-import { TEMPLATES, FONTS, templateById } from './templates.js';
+import { TEMPLATES, LAYOUTS, FONTS, templateById } from './templates.js';
 import { buildComposition } from './render.js';
 import { canvasToRgbPng } from './png.js';
 import { checkLicense, storedLicenseKey, storeLicenseKey } from './license.js';
@@ -29,9 +29,10 @@ let nextId = 1;
 
 function setTemplate(id) {
   const t = templateById(id);
-  state.style = { template: t, bg1: t.bg1, bg2: t.bg2, angle: t.angle, textColor: t.textColor, font: t.font, headlineScale: state.style?.headlineScale || 1 };
+  state.style = { template: t, layout: state.style?.layout || 'peek-left', bg1: t.bg1, bg2: t.bg2, textColor: t.textColor, font: t.font, headlineScale: state.style?.headlineScale || 1 };
   syncStyleInputs();
   renderTemplateGrid();
+  renderLayoutGrid();
   renderPreview();
 }
 
@@ -44,10 +45,37 @@ function renderTemplateGrid() {
     b.type = 'button';
     b.title = t.name;
     b.dataset.template = t.id;
-    b.className = (state.style?.template.id === t.id ? 'active ' : '') + (t.textPos === 'bottom' ? 'bottom' : '');
-    b.style.background = `linear-gradient(${t.angle}deg, ${t.bg1}, ${t.bg2})`;
-    b.innerHTML = `<span style="color:${t.textColor}">${t.name}</span>`;
+    b.setAttribute('aria-pressed', String(state.style?.template.id === t.id));
+    b.style.background = `linear-gradient(${t.bg1}, ${t.bg2})`;
+    b.style.color = t.textColor;
+    const fam = FONTS[t.font].family;
+    b.style.fontFamily = fam.includes(',') ? fam : `"${fam}"`;   // quoted: a name ending in a number is invalid CSS unquoted
+    b.style.fontWeight = FONTS[t.font].headlineStyle;
+    b.innerHTML = `<span class="aa">Aa</span><span class="name"></span>`;
+    b.querySelector('.name').textContent = t.name;
     b.onclick = () => setTemplate(t.id);
+    grid.appendChild(b);
+  }
+}
+
+// Little diagrams of each layout: canvas, device and text lines.
+const LAYOUT_ICONS = {
+  'peek-left':  '<rect x="-10" y="5" width="30" height="22" rx="4" class="dev"/><path d="M26 13h10M26 17h8M26 21h6" class="txt"/>',
+  'peek-right': '<rect x="20" y="5" width="30" height="22" rx="4" class="dev"/><path d="M4 13h10M4 17h8M4 21h6" class="txt"/>',
+  'top':        '<path d="M12 7h16M14 11h12" class="txt"/><rect x="9" y="15" width="22" height="13" rx="3" class="dev"/>',
+  'rise':       '<path d="M12 6h16M14 10h12" class="txt"/><rect x="6" y="14" width="28" height="22" rx="4" class="dev"/>',
+  'drop':       '<rect x="6" y="-8" width="28" height="22" rx="4" class="dev"/><path d="M12 21h16M14 25h12" class="txt"/>',
+};
+function renderLayoutGrid() {
+  const grid = $('layoutGrid');
+  grid.innerHTML = '';
+  for (const l of LAYOUTS) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.title = l.name; b.dataset.layout = l.id;
+    b.setAttribute('aria-label', l.name);
+    b.setAttribute('aria-pressed', String(state.style.layout === l.id));
+    b.innerHTML = `<svg viewBox="0 0 40 32" aria-hidden="true">${LAYOUT_ICONS[l.id]}</svg>`;
+    b.onclick = () => { state.style.layout = l.id; renderLayoutGrid(); renderPreview(); };
     grid.appendChild(b);
   }
 }
@@ -441,12 +469,12 @@ function showProgress(done, total) {
 async function boot() {
   // Konva draws text on canvas, so fonts must be loaded before the first render.
   await Promise.all([
-    'Inter:400', 'Inter:600', 'Inter:700', 'Inter:800', 'Space Grotesk:500', 'Space Grotesk:700', 'DM Serif Display:400',
+    'Inter:400', 'Inter:600', 'Source Serif 4:500', 'Source Sans 3:400', 'Source Sans 3:600',
   ].map(s => { const [f, w] = s.split(':'); return document.fonts.load(`${w} 40px "${f}"`, 'AaČć'); })).catch(() => {});
   const colors = await loadFrames();
   setupInputs();
   setupDevice(colors);
-  setTemplate('midnight');
+  setTemplate('paper');
   setupDropzone();
   setupTranslate();
   setupLicense();

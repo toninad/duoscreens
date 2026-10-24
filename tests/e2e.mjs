@@ -89,11 +89,16 @@ try {
   check(h === 'Your podcasts, unfolded', 'Headline edit stored');
 
   // Try every template renders without errors
-  for (const id of ['midnight', 'sunrise', 'paper', 'cobalt', 'mint']) {
+  for (const id of ['paper', 'ink', 'night', 'sage', 'mist', 'clay']) {
     await page.click(`[data-template="${id}"]`);
-    await page.screenshot({ path: path.join(out, `template-${id}.png`) });
+    await page.screenshot({ path: path.join(out, `theme-${id}.png`) });
   }
-  await page.click('[data-template="midnight"]');
+  for (const id of ['peek-left', 'peek-right', 'top', 'rise', 'drop']) {
+    await page.click(`[data-layout="${id}"]`);
+    await page.screenshot({ path: path.join(out, `layout-${id}.png`) });
+  }
+  await page.click('[data-template="paper"]');
+  await page.click('[data-layout="peek-left"]');
 
   // Translate (mocked endpoint)
   await page.click('#translateDetails summary');

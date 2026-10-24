@@ -15,8 +15,9 @@ drawn on a canvas and zipped locally. The only network call is the optional head
 ## Features (MVP)
 
 - Drag-and-drop or pick multiple screenshots; reorder and remove them. There's also a built-in sample screenshot.
-- 5 templates: **Midnight**, **Sunrise**, **Paper**, **Cobalt** and **Mint**. They mix gradient backgrounds, headline on top or at the bottom, a device frame or a rounded screen, and a fit or bleed layout.
-- A headline and subheadline per screenshot, background, gradient and text colors, 4 font choices (vendored Inter, Space Grotesk, DM Serif Display, plus System UI) and a text size slider.
+- **Layouts** (where the device and text go): peek from left, peek from right, text on top, rise from bottom, drop from top. Landscape poses put the text beside the device; portrait canvases put it above.
+- **Themes** (the look): Paper, Ink, Night, Sage, Mist and Clay. Flat grounds with a faint tone, Source Serif 4 or Inter headlines, balanced line breaks.
+- A headline and subheadline per screenshot, background, gradient and text colors, 3 font choices (vendored Source Serif 4, Inter, plus System UI) and a text size slider.
 - An optional separate image for the outer display, for example a real cover-screen capture.
 - **Export ZIP** with every screenshot × both displays × every language, at Apple's exact pixel sizes.
   The PNGs are **8-bit RGB with no alpha channel**, because App Store Connect rejects transparency. A tiny PNG encoder in `src/png.js` handles this, since `canvas.toBlob` always writes RGBA.
