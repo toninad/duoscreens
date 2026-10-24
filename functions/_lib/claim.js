@@ -13,6 +13,10 @@ const CLAIM_WINDOW = 7 * 24 * 60 * 60 * 1000;   // success links stop unlocking 
 
 export class PendingError extends Error {}
 
+// Polar refused or failed a step: say which, and point the buyer to the key in their email.
+const stepError = (step, status) => new LicenseError(
+  `Couldn't unlock automatically (Polar ${status} at ${step}). Paste the license key from your receipt email.`, 502);
+
 async function polar(env, method, path, { token = env.POLAR_ACCESS_TOKEN, body } = {}) {
   const res = await fetch(`${env.POLAR_API || 'https://api.polar.sh'}${path}`, {
     method,
@@ -30,7 +34,7 @@ export async function keyForCheckout(env, checkoutId) {
 
   const co = await polar(env, 'GET', `/v1/checkouts/${checkoutId}`);
   if (co.status === 404) throw new LicenseError('Checkout not found.', 404);
-  if (co.status >= 400 || !co.data) throw new LicenseError(`License server error (${co.status}).`, 502);
+  if (co.status >= 400 || !co.data) throw stepError('checkout', co.status);
   const { status, customer_id: customerId, created_at: createdAt, organization_id: orgId } = co.data;
   if (orgId && orgId !== env.POLAR_ORGANIZATION_ID) throw new LicenseError('Checkout not found.', 404);
   if (createdAt && Date.now() - Date.parse(createdAt) > CLAIM_WINDOW) {
@@ -40,11 +44,11 @@ export async function keyForCheckout(env, checkoutId) {
   if (status !== 'succeeded' || !customerId) throw new LicenseError('This checkout was not completed.', 402);
 
   const session = await polar(env, 'POST', '/v1/customer-sessions', { body: { customer_id: customerId } });
-  if (session.status >= 400 || !session.data?.token) throw new LicenseError(`License server error (${session.status}).`, 502);
+  if (session.status >= 400 || !session.data?.token) throw stepError('customer session', session.status);
 
   const benefit = env.POLAR_BENEFIT_ID ? `?benefit_id=${encodeURIComponent(env.POLAR_BENEFIT_ID)}&limit=100` : '?limit=100';
   const keys = await polar(env, 'GET', `/v1/customer-portal/license-keys/${benefit}`, { token: session.data.token });
-  if (keys.status >= 400) throw new LicenseError(`License server error (${keys.status}).`, 502);
+  if (keys.status >= 400) throw stepError('license keys', keys.status);
   const granted = (keys.data?.items || []).filter(k => k.status === 'granted' && k.key);
   if (!granted.length) throw new PendingError('Your license key is being created.');
   // Newest first, in case the customer bought more than once.
