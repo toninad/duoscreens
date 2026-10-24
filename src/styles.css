@@ -839,3 +839,10 @@ body { display: block; height: 100dvh; }
 }
 .group .shot-card:not(.selected):hover .frame { box-shadow: 0 0 0 calc(1px * var(--ui, 1)) color-mix(in srgb, var(--ink) 24%, transparent), 0 calc(2px * var(--ui, 1)) calc(10px * var(--ui, 1)) -2px rgba(18,18,18,.08); }
 .group .shot-card.selected .frame { box-shadow: 0 0 0 calc(2px * var(--ui, 1)) var(--orange), 0 calc(2px * var(--ui, 1)) calc(10px * var(--ui, 1)) -2px rgba(18,18,18,.08); }
+
+/* Pills take the board's own colour; the border and soft shadow set them apart. Pressed items
+   inside them use the warm tone instead. */
+.top-left, .top-center, .topbar-actions, .dock, .zoom-tools, .add-screen, .card-pose-pill, .add-group, .add-group:hover, .pop .card {
+  background: color-mix(in srgb, var(--paper) 92%, transparent); --raised: var(--card);
+}
+.add-screen, .card-pose-pill, .add-group, .pop .card { background: var(--paper); }
