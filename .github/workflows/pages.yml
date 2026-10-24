@@ -32,6 +32,8 @@ jobs:
           mkdir -p _site
           git archive HEAD | tar -x -C _site
           rm -rf _site/tests _site/supabase _site/.github
+          # Bust browser caches: stylesheet and script URLs change with every deploy.
+          sed -i "s/?v=dev/?v=${GITHUB_SHA::7}/g" _site/index.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
