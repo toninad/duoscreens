@@ -312,6 +312,12 @@ function positionEditor() {
   ed.style.height = `${ed.scrollHeight}px`;
 }
 
+function stopEditing() {
+  editing = null;
+  $('inlineEditor').hidden = true;
+  renderPreview();
+}
+
 function setupInlineEditor() {
   const ed = $('inlineEditor');
   ed.oninput = () => {
@@ -322,14 +328,14 @@ function setupInlineEditor() {
     renderShotList();
   };
   ed.onkeydown = (e) => {
-    if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); ed.blur(); }
+    if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); stopEditing(); ed.blur(); }
     if (e.key === 'Tab' && editing) {   // Tab hops between headline and subheadline
       e.preventDefault();
       const next = editing.key === 'headline' ? 'subheadline' : 'headline';
       startEditing(editing.display, next);
     }
   };
-  ed.onblur = () => { setTimeout(() => { if (document.activeElement !== ed) { editing = null; ed.hidden = true; renderPreview(); } }); };
+  ed.onblur = () => { setTimeout(() => { if (editing && document.activeElement !== ed) stopEditing(); }); };
 }
 
 function refresh() {
