@@ -17,7 +17,12 @@ const targetsOfDevice = (id) => TARGETS.filter(t => t.device.id === id);
 const MAX_SHOTS = 10;   // App Store Connect takes up to 10 screenshots per size
 const groupOf = (shotId) => state.groups.find(g => g.shots.some(s => s.id === shotId));
 // A screenshot card is one screen: one of its device's displays (the Duo's inner or outer) in an orientation.
-const targetOf = (shot) => targetById(shot.target) || targetsOfDevice(groupOf(shot.id)?.device)[0];
+// The display a new card starts on: the device's startOn display (the Duo's cover screen), else its first.
+const firstTarget = (deviceId) => {
+  const ts = targetsOfDevice(deviceId);
+  return ts.find(t => t.display.id === t.device.startOn) || ts[0];
+};
+const targetOf = (shot) => targetById(shot.target) || firstTarget(groupOf(shot.id)?.device);
 const targetsOf = (shot) => [targetOf(shot)];
 const countOn = (group, tid) => group.shots.filter(s => targetOf(s).id === tid).length;   // per App Store size, max 10
 // Each card has its own orientation (iPhones are always portrait).
@@ -723,7 +728,7 @@ function newShot(group) {
   // A new card starts like the one before it, on a display that still has room.
   const prev = group?.shots.at(-1);
   const room = (tid) => !group || countOn(group, tid) < MAX_SHOTS;
-  const target = [prev && targetOf(prev).id, ...targets.map(t => t.id)].find(tid => tid && room(tid));
+  const target = [prev && targetOf(prev).id, firstTarget(group?.device)?.id, ...targets.map(t => t.id)].find(tid => tid && room(tid));
   return { id: nextId++, target, pose: prev?.pose || 'portrait', images: {}, text: { [state.baseLang]: sameText(screens, { headline, subheadline }) } };
 }
 

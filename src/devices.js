@@ -25,6 +25,7 @@ export const FAMILIES = [
 export const DEVICES = [
   {
     id: 'duo', family: 'duo', name: 'iPhone Duo', short: 'Duo', note: 'Inner and outer display',
+    startOn: 'outer',   // new cards start on the cover screen, in portrait
     displays: [
       { id: 'inner', label: 'Inner', size: sizes(2007, 2853), screen: 'duo/inner' },
       { id: 'outer', label: 'Outer', size: sizes(1398, 2034), screen: 'duo/outer' },
