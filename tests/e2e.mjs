@@ -84,12 +84,13 @@ try {
   await page.waitForSelector('#deviceDialog[open]');
   check(true, 'First launch opens the device picker');
   await page.click('.tile[data-family="iphone"] .tile-select');
-  await page.waitForFunction(() => window.__dss.state.devices.join() === 'iphone-18-pro-max');
-  check(true, 'Free: picking iPhone replaces the Duo');
+  check(await page.getAttribute('[data-model="iphone-18-pro-max"]', 'aria-checked') === 'true', 'Picking iPhone shows its models');
   await page.click('.tile[data-family="duo"] .tile-select');
-  await page.waitForFunction(() => window.__dss.state.devices.join() === 'duo');
-  check(true, 'Free: one device at a time');
+  check(await page.getAttribute('.tile[data-family="duo"] .tile-select', 'aria-checked') === 'true', 'One device is picked at a time');
   await page.click('#deviceDone');
+  await page.waitForFunction(() => window.__dss.state.devices.join() === 'duo');
+  check(true, 'Continue makes an iPhone Duo group');
+  check(!!(await page.$('.add-group .pro-tag')), 'Free: adding a second device asks for Pro');
   check(await page.$$eval('.shot-card .screen-add', bs => bs.length) === 2, 'The board starts with an empty card: an "add screenshot" screen per frame');
 
   // Make a sample screenshot file using the app's own generator and save it as a fixture.
@@ -198,13 +199,11 @@ try {
   await fs.writeFile(path.join(out, 'de-inner-02.png'), await pro.zip.file(deInner).async('nodebuffer'));
 
   // Landscape poses export Apple's landscape sizes, in both finishes.
-  await page.click('#devicesBtn');
   await page.click('.segmented[data-pose="duo/inner"] [data-v="landscape"]');
   await page.click('.segmented[data-pose="duo/outer"] [data-v="landscape"]');
   const finishes = await page.$$eval('.swatches[data-device="duo"] button', bs => bs.map(b => b.dataset.color));
   check(finishes.includes('night-sky'), `Device finishes available: ${finishes.join(', ')}`);
   await page.click(`.swatches[data-device="duo"] [data-color="${finishes.at(-1)}"]`);
-  await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(out, 'landscape.png') });
   const land = await exportZip(page, 'landscape');
@@ -212,25 +211,29 @@ try {
   check(landPngs.every(n => n.includes('2853x2007') || n.includes('2034x1398')), 'Landscape export uses 2853×2007 and 2034×1398');
 
   // iPhone: tick it, then pick one model. Its size joins the Duo's on every screenshot, in every language.
-  await page.click('#devicesBtn');
+  await page.click('.add-group');
+  check(!(await page.$('.tile[data-family="duo"] .tile-select:not([disabled])')), 'A device already on the board can\'t be added twice');
   await page.click('.tile[data-family="iphone"] .tile-select');
   await page.waitForSelector('[data-model="iphone-18-pro-max"]');
   check(await page.getAttribute('[data-model="iphone-18-pro-max"]', 'aria-checked') === 'true', 'iPhone starts on the 18 Pro Max');
   await page.click('[data-model="iphone-air"]');
-  await page.click('.swatches[data-device="iphone-air"] [data-color="sky-blue"]');
-  await page.waitForFunction(() => window.__dss.state.colors['iphone-air'] === 'sky-blue' && window.__dss.state.devices.join() === 'duo,iphone-air');
   await page.screenshot({ path: path.join(out, 'device-picker.png') });
-  await page.keyboard.press('Escape');
-  check(await page.evaluate(() => window.__dss.state.devices.join()) === 'duo,iphone-air', 'One iPhone model at a time');
+  await page.click('#deviceDone');
+  await page.waitForFunction(() => window.__dss.state.devices.join() === 'duo,iphone-air');
+  check(true, 'Add device makes a second group, for the iPhone Air');
+  await page.click('.swatches[data-device="iphone-air"] [data-color="sky-blue"]');
+  await page.waitForFunction(() => window.__dss.state.colors['iphone-air'] === 'sky-blue');
+  check(true, 'The finish is picked on the board, in the group header');
   check(!(await page.$('.segmented[data-pose="iphone-air/main"]')), 'iPhones have no orientation choice: always portrait');
-  check(await page.$$eval('.lang-row[data-lang="en"] .shot-card:first-child .frame', fs => fs.length) === 3, 'A card shows a frame per App Store size');
+  check(await page.$$eval('.group[data-device="iphone-air"] .lang-row[data-lang="en"] .shot-card .frame', fs => fs.length) === 1, 'The iPhone group starts with one empty card');
   const half = await exportZip(page, 'devices-half');
   check(Object.keys(half.zip.files).filter(n => n.endsWith('.png')).length === 12, 'Empty iPhone screens are left out of the export');
+  await page.click('.group[data-device="iphone-air"] .add-card');
   for (const n of [1, 2]) {
-    const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click(`.lang-row[data-lang="en"] .shot-card:nth-child(${n}) .frame[data-target="iphone-air/main"] .screen-add`)]);
+    const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click(`.group[data-device="iphone-air"] .lang-row[data-lang="en"] .shot-card:nth-child(${n}) .screen-add`)]);
     await fc.setFiles(fixture);
   }
-  await page.waitForFunction(() => window.__dss.state.shots.every(s => s.images.iphone));
+  await page.waitForFunction(() => window.__dss.state.groups[1].shots.every(s => s.images.iphone));
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(out, 'devices.png') });
   const all = await exportZip(page, 'devices');
@@ -242,12 +245,12 @@ try {
   // Variations: duplicate the second screenshot, restyle only the copy.
   await page.click('.lang-row[data-lang="en"] .shot-card:nth-child(2) .card-num');
   await page.click('.lang-row[data-lang="en"] .shot-card:nth-child(2) [data-a="dup"]');
-  await page.waitForFunction(() => window.__dss.state.shots.length === 3);
-  check((await page.textContent('#scopeLabel')).includes('3'), 'The copy is selected and the dock scopes to it');
+  await page.waitForFunction(() => window.__dss.state.groups[0].shots.length === 3);
+  check((await page.textContent('#scopeLabel')) === 'iPhone Duo 3', 'The copy is selected and the dock scopes to it');
   await page.click('[data-template="ink"]');
   const styles = await page.evaluate(() => window.__dss.state.shots.map(s => s.style?.bg1 || 'base'));
   check(styles[0] === 'base' && styles[1] === 'base' && styles[2] !== 'base', 'Theme applies to the selected variation only');
-  check(await page.$$eval('.lang-row[data-lang="de"] .shot-card', cs => cs.length) === 3, 'Variation appears in every language row');
+  check(await page.$$eval('.group[data-device="duo"] .lang-row[data-lang="de"] .shot-card', cs => cs.length) === 3, 'Variation appears in every language row');
   await page.click('#zoomFit');
   await page.waitForTimeout(400);
   await page.screenshot({ path: path.join(out, 'board.png') });
