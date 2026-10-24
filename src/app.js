@@ -22,7 +22,8 @@ const targetLabel = (t) => t.display.label ? `${t.device.name} · ${t.display.la
 
 const state = {
   // The board: a group per device, each with up to 10 screenshots.
-  // shot = { id, images: { [screen]: img }, variants?, style?: overrides, text: { [lang]: { headline, subheadline } } }
+  // shot = { id, images: { [screen]: img }, variants?, style?: overrides, edited?,
+  //          text: { [lang]: { [screen]: { headline, subheadline } } } }: every screen has its own words
   groups: [],           // { id, device, shots: [shot] }
   get shots() { return this.groups.flatMap(g => g.shots); },
   get devices() { return this.groups.map(g => g.device); },
@@ -153,9 +154,15 @@ function syncStyleInputs() {
 }
 
 // ---------- Text ----------
-function textFor(shot, lang) {
-  return shot.text[lang] || shot.text[state.baseLang] || { headline: '', subheadline: '' };
+// The words on one screen. Falls back to the base language (until translated), then to another
+// screen's words (after switching a group to a device with different screens).
+function textFor(shot, lang, screen) {
+  const any = (t) => t && (t[screen] || Object.values(t)[0]);
+  return shot.text[lang]?.[screen] || shot.text[state.baseLang]?.[screen] || any(shot.text[lang]) || any(shot.text[state.baseLang])
+    || { headline: '', subheadline: '' };
 }
+const screensOf = (shot) => [...new Set(targetsOf(shot).map(t => t.display.screen))];
+const sameText = (screens, t) => Object.fromEntries(screens.map(sc => [sc, { ...t }]));
 
 // Every screen has its own capture: the one added to it, else a sample capture (in the matching pose
 // when there is one). Null means the screen is still empty and shows the "add screenshot" placeholder.
@@ -166,7 +173,7 @@ function imageFor(shot, screen, pose) {
 const hasAnyImage = (shot) => targetsOf(shot).some(t => imageFor(shot, t.display.screen, state.pose[t.id]));
 
 function compositionProps(shot, tid, lang) {
-  const t = textFor(shot, lang);
+  const t = textFor(shot, lang, targetById(tid).display.screen);
   const target = targetById(tid), pose = state.pose[tid];
   return {
     image: imageFor(shot, target.display.screen, pose),
@@ -541,7 +548,7 @@ function startEditing(f, key) {
   if (!state.selection.has(f.shotId) || state.selection.size > 1) { state.selection = new Set([f.shotId]); syncSelectionUI(); }
   const ed = $('inlineEditor');
   f.el.appendChild(ed);
-  ed.value = textFor(shot, f.lang)[key] || '';
+  ed.value = textFor(shot, f.lang, targetById(f.target).display.screen)[key] || '';
   ed.placeholder = key === 'headline' ? 'Your best feature' : 'One line that explains it';
   ed.hidden = false;
   drawAll();
@@ -583,7 +590,9 @@ function setupInlineEditor() {
   ed.oninput = () => {
     const shot = editing && state.shots.find(s => s.id === editing.shotId);
     if (!shot) return;
-    shot.text[editing.lang] = { ...textFor(shot, editing.lang), [editing.key]: ed.value.replace(/\n/g, ' ') };
+    const screen = targetById(editing.target).display.screen;
+    shot.text[editing.lang] = { ...shot.text[editing.lang], [screen]: { ...textFor(shot, editing.lang, screen), [editing.key]: ed.value.replace(/\n/g, ' ') } };
+    shot.edited = true;
     scheduleDraw();
   };
   ed.onkeydown = (e) => {
@@ -687,7 +696,8 @@ const DEFAULT_COPY = [
 
 function newShot(group) {
   const [headline, subheadline] = DEFAULT_COPY[(group?.shots.length || 0) % DEFAULT_COPY.length];
-  return { id: nextId++, images: {}, text: { [state.baseLang]: { headline, subheadline } } };
+  const screens = [...new Set(targetsOfDevice(group?.device).map(t => t.display.screen))];
+  return { id: nextId++, images: {}, text: { [state.baseLang]: sameText(screens, { headline, subheadline }) } };
 }
 
 // The group and screen whose shape is closest to the capture's: a tall capture goes to an iPhone, a
@@ -754,7 +764,7 @@ async function loadSampleShots() {
     }
     if (!Object.values(variants).some(v => Object.values(v).some(Boolean))) return [];
     shots.push({ id: nextId++, images: {}, variants,
-      text: { [state.baseLang]: { headline: s.headline, subheadline: s.subheadline } } });
+      text: { [state.baseLang]: sameText(['duo/inner', 'duo/outer'], { headline: s.headline, subheadline: s.subheadline }) } });
   }
   return shots;
 }
@@ -779,7 +789,7 @@ function setupDropzone() {
       await loadFrame('duo', state.colors.duo);
       // The captures were taken unfolded in landscape, so show the inner display that way.
       state.pose['duo/inner'] = 'landscape';
-      g.shots = [...g.shots.filter(hasAnyImage), ...shots].slice(0, MAX_SHOTS);   // samples replace untouched empty cards
+      g.shots = [...g.shots.filter(x => hasAnyImage(x) || x.edited), ...shots].slice(0, MAX_SHOTS);   // samples replace untouched empty cards
       saveDevicePrefs();
       return refresh({ fit: true });
     }
@@ -993,13 +1003,15 @@ function setupTranslate() {
     if (!state.shots.length) return toast('Add screenshots first.');
     const targets = selectedTargets();
     if (targets.length > 12) { $('translateStatus').textContent = 'Pick up to 12 languages at a time.'; return; }
-    const texts = state.shots.flatMap(s => { const t = textFor(s, state.baseLang); return [t.headline, t.subheadline]; });
+    // Every screen's words, in order; the answer comes back in the same order.
+    const slots = state.shots.flatMap(s => screensOf(s).map(screen => ({ s, screen })));
+    const texts = slots.flatMap(({ s, screen }) => { const t = textFor(s, state.baseLang, screen); return [t.headline, t.subheadline]; });
     $('translateBtn').disabled = true;
     $('translateStatus').textContent = `Translating into ${targets.length} language${targets.length > 1 ? 's' : ''}…`;
     try {
       const { translations, failed, usage } = await translateTexts(texts, targets, state.baseLang, storedLicenseKey());
       for (const [lang, out] of Object.entries(translations)) {
-        state.shots.forEach((s, i) => { s.text[lang] = { headline: out[i * 2], subheadline: out[i * 2 + 1] }; });
+        slots.forEach(({ s, screen }, i) => { s.text[lang] = { ...s.text[lang], [screen]: { headline: out[i * 2], subheadline: out[i * 2 + 1] } }; });
         if (!state.langs.includes(lang)) state.langs.push(lang);
       }
       const added = Object.keys(translations);

@@ -126,8 +126,9 @@ try {
   await page.fill('#inlineEditor', 'Browse and listen side by side on iPhone Duo.');
   await page.keyboard.press('Enter');
   check(await page.isHidden('#inlineEditor'), 'Inline editor closes on Enter');
-  const h = await page.evaluate(() => window.__dss.state.shots[0].text.en.headline);
-  check(h === 'Your podcasts, unfolded', 'Headline edit stored');
+  const h = await page.evaluate(() => window.__dss.state.shots[0].text.en);
+  check(h['duo/inner'].headline === 'Your podcasts, unfolded', 'Headline edit stored');
+  check(h['duo/outer'].headline !== 'Your podcasts, unfolded', 'Each screen has its own words: the outer display keeps its headline');
   await page.keyboard.press('Escape');
   check(await page.evaluate(() => window.__dss.state.selection.size === 0), 'Escape clears the selection');
 
@@ -179,7 +180,7 @@ try {
   await page.check('#langChecks input[value="ja"]');
   await page.click('#translateBtn');
   await page.waitForFunction(() => ['de', 'ja'].every(l => window.__dss.state.langs.includes(l)));
-  const deText = await page.evaluate(() => window.__dss.state.shots[1].text.de.headline);
+  const deText = await page.evaluate(() => window.__dss.state.shots[1].text.de['duo/outer'].headline);
   check(deText === 'Mach da weiter, wo du aufgehört hast', `Translation applied: "${deText}"`);
   await page.keyboard.press('Escape');
   check(await page.$$eval('.lang-row', rs => rs.map(r => r.dataset.lang).join()) === 'en,de,ja', 'Board shows a row per language');
