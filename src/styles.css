@@ -611,14 +611,17 @@ details[open] summary { margin-bottom: 12px; }
   align-self: stretch; height: auto !important; width: calc(132px * var(--ui, 1)); margin: calc(30px * var(--ui, 1)) 0 calc(22px * var(--ui, 1));
   border-radius: calc(14px * var(--ui, 1)); border-width: calc(1.5px * var(--ui, 1));
 }
-/* The selected card shows its orientation choice (per display on the Duo) */
-.card-pose { display: none; align-items: center; gap: 6px; margin-left: 10px; }
+/* The selected card's display and orientation: a small pill centred on its frame's top edge */
+.card-pose { display: none; }
 .shot-card.selected .card-pose {
-  display: inline-flex; position: absolute; left: 6px; bottom: calc(100% + 6px); z-index: 2; margin: 0; padding: 4px 8px 4px 12px; white-space: nowrap;
-  border-radius: 999px; background: var(--raised); box-shadow: 0 0 0 .5px var(--hairline), 0 8px 20px -10px rgba(0,0,0,.35);
+  display: flex; gap: 2px; position: absolute; left: 50%; top: 0; transform: translate(-50%, -50%); z-index: 3; zoom: var(--ui, 1);
+  padding: 2px; border-radius: 999px; background: var(--raised); box-shadow: 0 0 0 .5px var(--hairline), 0 6px 16px -8px rgba(0,0,0,.35);
 }
-.card-head { position: relative; }
-.card-pose .segmented button { width: 26px; height: 22px; }
-.card-pose .segmented svg { width: 15px; height: 15px; }
-.card-pose .pose-label { font-size: 11.5px; color: var(--muted); }
-.card-pose .pose-label:not(:first-child) { margin-left: 6px; }
+.card-pose .segmented { background: none; padding: 0; }
+.card-pose .segmented + .segmented { padding-left: 2px; border-left: .5px solid var(--hairline); }
+.card-pose .segmented button { width: 26px; height: 24px; }
+.card-pose .segmented svg { width: 17px; height: 17px; }
+.card-pose .fold { stroke-dasharray: 1.6 1.8; opacity: .7; }
+.card-pose .cam { fill: currentColor; stroke: none; }
+.card-pose button:disabled { opacity: .3; cursor: default; }
+.frame-wrap { position: relative; }

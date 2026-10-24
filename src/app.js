@@ -295,7 +295,7 @@ function buildStructure() {
       group.shots.forEach((shot, i) => {
         const card = el('article', 'shot-card');
         card.dataset.id = shot.id;
-        card.innerHTML = `<header class="card-head"><span class="card-num">${pad2(i + 1)}</span><span class="card-tag"></span><span class="card-pose"></span>
+        card.innerHTML = `<header class="card-head"><span class="card-num">${pad2(i + 1)}</span><span class="card-tag"></span>
           <span class="card-tools">
             <button type="button" data-a="dup" title="Duplicate as a variation" aria-label="Duplicate" ${countOn(group, targetOf(shot).id) >= MAX_SHOTS ? 'disabled' : ''}>${ICON.dup}</button>
             <button type="button" data-a="left" title="Move left" aria-label="Move left" ${i === 0 ? 'disabled' : ''}>${ICON.left}</button>
@@ -309,8 +309,9 @@ function buildStructure() {
           else if (a === 'right') moveShot(shot.id, 1);
           else if (a === 'del') deleteShot(shot.id);
         };
-        // Which display and orientation this card is, shown when it's selected (the Duo has two displays).
-        const poseBox = card.querySelector('.card-pose');
+        // Which display and orientation this card is: a small pill on the frame's top edge, shown when
+        // the card is selected (the Duo has two displays; iPhones are always portrait).
+        const poseBox = el('div', 'card-pose');
         for (const t of targets) {
           const poses = t.display.poses || ['portrait', 'landscape'];
           if (targets.length < 2 && poses.length < 2) continue;   // iPhones: one display, always portrait
@@ -320,7 +321,7 @@ function buildStructure() {
           seg.setAttribute('aria-label', `${t.display.label} display`);
           const full = t.id !== targetOf(shot).id && countOn(group, t.id) >= MAX_SHOTS;
           for (const v of poses) {
-            const b = el('button', '', POSE_ICON[v]);
+            const b = el('button', '', SCREEN_ICON[`${t.display.id}-${v}`] || POSE_ICON[v]);
             b.type = 'button'; b.dataset.v = v; b.setAttribute('aria-label', `${t.display.label} ${v}`);
             b.title = full ? `${t.display.label} has its ${MAX_SHOTS} screenshots` : `${t.display.label}, ${v}: ${t.display.size[v].width} × ${t.display.size[v].height}`;
             b.disabled = full;
@@ -328,9 +329,7 @@ function buildStructure() {
             b.onclick = (e) => { e.stopPropagation(); shot.target = t.id; shot.pose = v; renderBoard(); };
             seg.appendChild(b);
           }
-          const l = el('span', 'pose-label');
-          l.textContent = t.display.label;
-          poseBox.append(l, seg);
+          poseBox.append(seg);
         }
         const framesEl = card.querySelector('.card-frames');
         for (const t of targetsOf(shot)) {
@@ -354,6 +353,7 @@ function buildStructure() {
             cap.textContent = `${t.display.label ? t.display.label + ' · ' : ''}${size.width} × ${size.height}`;
             wrap.appendChild(cap);
           }
+          if (poseBox.childElementCount) wrap.appendChild(poseBox);
           framesEl.appendChild(wrap);
           const stage = new Konva.Stage({ container: fr.firstChild, width: Math.round(size.width * K), height: Math.round(size.height * K) });
           const layer = new Konva.Layer({ listening: false });
@@ -840,6 +840,13 @@ function setupInputs() {
 const POSE_ICON = {
   portrait: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6" y="3" width="8" height="14" rx="2.2"/></svg>',
   landscape: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="6" width="14" height="8" rx="2.2"/></svg>',
+};
+// Display + orientation glyphs: the unfolded inner screen has a fold line, the cover screen a camera.
+const SCREEN_ICON = {
+  'inner-portrait': '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="4" y="2.5" width="12" height="15" rx="2"/><path d="M4.5 10h11" class="fold"/></svg>',
+  'inner-landscape': '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="4" width="15" height="12" rx="2"/><path d="M10 4.5v11" class="fold"/></svg>',
+  'outer-portrait': '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6" y="3" width="8" height="14" rx="2"/><circle cx="11.6" cy="5.4" r=".9" class="cam"/></svg>',
+  'outer-landscape': '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="6" width="14" height="8" rx="2"/><circle cx="14.6" cy="8.4" r=".9" class="cam"/></svg>',
 };
 const CHECK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8.5l2.6 2.5L12 5.5"/></svg>';
 const SKETCH = {
