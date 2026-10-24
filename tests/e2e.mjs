@@ -11,8 +11,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const PORT = 8765;
 const BASE = `http://127.0.0.1:${PORT}`;
-// Apple's iPhone Duo sizes, portrait and landscape.
-const VALID = { inner: ['2007x2853', '2853x2007'], outer: ['1398x2034', '2034x1398'] };
+// Apple's App Store sizes per folder, portrait and landscape.
+const VALID = {
+  'iPhone-Duo-inner': ['2007x2853', '2853x2007'], 'iPhone-Duo-outer': ['1398x2034', '2034x1398'],
+  'iPhone-18-Pro-Max': ['1320x2868', '2868x1320'], 'iPhone-Air': ['1260x2736', '2736x1260'], 'iPhone-18-Pro': ['1206x2622', '2622x1206'],
+};
 const out = path.join(here, 'out');
 await fs.mkdir(out, { recursive: true });
 
@@ -39,9 +42,9 @@ async function verifyZip(zip, label, expectedCount) {
   check(pngs.length === expectedCount, `${label}: ZIP has ${pngs.length} PNGs (expected ${expectedCount}): ${pngs.join(', ')}`);
   for (const name of pngs) {
     const info = pngInfo(Buffer.from(await zip.file(name).async('uint8array')));
-    const [, display, folder] = name.match(/iPhone-Duo-(inner|outer)-(\d+x\d+)\//);
+    const [, device, folder] = name.match(/(iPhone-[\w-]+?)-(\d+x\d+)\//);
     const [w, h] = folder.split('x').map(Number);
-    check(VALID[display].includes(folder), `${label}: ${folder} is an App Store size for the ${display} display`);
+    check(VALID[device]?.includes(folder), `${label}: ${folder} is an App Store size for ${device}`);
     check(info.sig && info.width === w && info.height === h, `${label}: ${name} is ${info.width}×${info.height} (expected ${w}×${h})`);
     check(info.colorType === 2 && info.bitDepth === 8, `${label}: ${name} is 8-bit RGB without alpha (colorType=${info.colorType})`);
   }
@@ -174,16 +177,32 @@ try {
   await fs.writeFile(path.join(out, 'de-inner-02.png'), await pro.zip.file(deInner).async('nodebuffer'));
 
   // Landscape poses export Apple's landscape sizes, in both finishes.
-  await page.click('.segmented[data-pose="inner"] [data-v="landscape"]');
-  await page.click('.segmented[data-pose="outer"] [data-v="landscape"]');
-  const finishes = await page.$$eval('#colorSwatches button', bs => bs.map(b => b.dataset.color));
+  await page.click('#devicesBtn');
+  await page.click('.segmented[data-pose="duo/inner"] [data-v="landscape"]');
+  await page.click('.segmented[data-pose="duo/outer"] [data-v="landscape"]');
+  const finishes = await page.$$eval('.swatches[data-device="duo"] button', bs => bs.map(b => b.dataset.color));
   check(finishes.includes('night-sky'), `Device finishes available: ${finishes.join(', ')}`);
-  await page.click(`#colorSwatches [data-color="${finishes.at(-1)}"]`);
+  await page.click(`.swatches[data-device="duo"] [data-color="${finishes.at(-1)}"]`);
+  await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(out, 'landscape.png') });
   const land = await exportZip(page, 'landscape');
   const landPngs = await verifyZip(land.zip, 'landscape', 12);
   check(landPngs.every(n => n.includes('2853x2007') || n.includes('2034x1398')), 'Landscape export uses 2853×2007 and 2034×1398');
+
+  // More devices: every iPhone adds its own size to every screenshot, in every language.
+  await page.click('#devicesBtn');
+  for (const d of ['iphone-18-pro-max', 'iphone-air', 'iphone-18-pro']) await page.check(`.device-row[data-device="${d}"] input`);
+  await page.click('.swatches[data-device="iphone-air"] [data-color="sky-blue"]');
+  await page.keyboard.press('Escape');
+  check(await page.$$eval('.lang-row[data-lang="en"] .shot-card:first-child .frame', fs => fs.length) === 5, 'A card shows a frame per App Store size');
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(out, 'devices.png') });
+  const all = await exportZip(page, 'devices');
+  const allPngs = await verifyZip(all.zip, 'devices', 30);
+  const air = allPngs.find(n => n.startsWith('en/iPhone-Air-1260x2736/01'));
+  check(!!air, 'iPhone Air export is 1260×2736');
+  if (air) await fs.writeFile(path.join(out, 'iphone-air-01.png'), await all.zip.file(air).async('nodebuffer'));
 
   // Variations: duplicate the second screenshot, restyle only the copy.
   await page.click('.lang-row[data-lang="en"] .shot-card:nth-child(2) .card-num');

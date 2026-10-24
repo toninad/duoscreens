@@ -60,17 +60,21 @@ export async function makeSampleScreenshot(width = 2007, height = 2853) {
   return new Promise(res => c.toBlob(res, 'image/png'));
 }
 
-// Real HearHere captures used by "Try a sample", one per pose they were taken in.
+// Real HearHere captures used by "Try a sample", per screen and pose they were taken in.
 // Files live in samples/; a pose without a capture falls back to the generated screen above.
 export const SAMPLE_SHOTS = [
   {
     headline: 'Every show, side by side', subheadline: 'Browse episodes while the artwork stays in view.',
-    inner: { landscape: 'samples/inner-landscape-show.webp' },
-    outer: { portrait: 'samples/outer-portrait-home.webp', landscape: 'samples/outer-landscape-player.webp' },
+    captures: {
+      'duo/inner': { landscape: 'samples/inner-landscape-show.webp' },
+      'duo/outer': { portrait: 'samples/outer-portrait-home.webp', landscape: 'samples/outer-landscape-player.webp' },
+    },
   },
   {
     headline: 'Your queue, always in reach', subheadline: 'Unfold to see what plays next.',
-    inner: { landscape: 'samples/inner-landscape-player.webp' },
-    outer: { portrait: 'samples/outer-portrait-home.webp', landscape: 'samples/outer-landscape-player.webp' },
+    captures: {
+      'duo/inner': { landscape: 'samples/inner-landscape-player.webp' },
+      'duo/outer': { portrait: 'samples/outer-portrait-home.webp', landscape: 'samples/outer-landscape-player.webp' },
+    },
   },
 ];

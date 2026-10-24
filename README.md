@@ -1,7 +1,9 @@
-# Duo Screenshot Studio
+# HearHere Studio
 
-Turn your existing App Store screenshots into **App Store-ready iPhone Duo screenshots**, one for the
-**inner (unfolded) display** and one for the **outer (cover) display**, with marketing headlines, in a few minutes.
+Turn your existing App Store screenshots into **App Store-ready device screenshots**, with marketing headlines,
+themes and translations, in a few minutes. Devices: **iPhone Duo** (inner and outer display), **iPhone 18 Pro Max**,
+**iPhone Air** and **iPhone 18 Pro**. Pick them under *Devices* in the bottom bar; each one adds its App Store size to
+every screenshot, and the export has a folder per size and language.
 
 Everything runs in the browser. Screenshots are never uploaded: they're read with `URL.createObjectURL`,
 drawn on a canvas and zipped locally. The only network calls are the Pro license check and the optional headline
@@ -23,7 +25,7 @@ translation, which sends **text only**.
 - **Export ZIP** with every screenshot × both displays × every language, at Apple's exact pixel sizes.
   The PNGs are **8-bit RGB with no alpha channel**, because App Store Connect rejects transparency. A tiny PNG encoder in `src/png.js` handles this, since `canvas.toBlob` always writes RGBA.
 - **Translate headlines (Pro):** pick any of 39 App Store languages and translate every headline at once with Claude. Each language becomes its own folder in the ZIP.
-- **Free vs Pro:** free exports carry a small "Made with Duo Screenshot Studio" watermark. **Pro** (€15.99 one-time, sold on Polar) removes it and unlocks translation.
+- **Free vs Pro:** free exports carry a small "Made with HearHere Studio" watermark. **Pro** (€15.99 one-time, sold on Polar) removes it and unlocks translation.
 
 ## iPhone Duo screenshot sizes ✅ verified
 
@@ -47,9 +49,11 @@ All sizes live in one constant: `DUO_SIZES` in `src/config.js`. Each display can
 
 ### Device frames and samples
 
-- Frame templates draw the real iPhone Duo frames from `vendor/frames/<finish>/{inner,outer}-{portrait,landscape}.webp`.
-  The screen opening and corner radii of each frame are in `FRAME_GEOMETRY` (`src/frames.js`); the screenshot is
-  cover-fitted into that opening and the frame (with the camera) is drawn on top. Finishes are listed in `DEVICE_COLORS`.
+- Devices, their App Store sizes, finishes and frame geometry live in `src/devices.js`. The Duo frames are
+  `vendor/frames/<finish>/{inner,outer}-{portrait,landscape}.webp`; iPhone frames are portrait renders
+  `vendor/frames/<device>/<finish>.webp` (from Figma's iOS 27 bezel kit, exported at 3×), turned a quarter for landscape.
+  The screenshot is cover-fitted into the measured screen opening and the frame (with the camera) is drawn on top.
+  A finish only shows up once its files exist.
 - "Try a sample" loads real captures listed in `SAMPLE_SHOTS` (`src/sample.js`) from `samples/`, one per pose (HearHere captures).
   If they're missing it falls back to a generated screen at the current inner size.
 

@@ -101,7 +101,7 @@ function place(layout, w, h, aspect, measureText) {
  * @param {object} p  { image, frame, headline, subheadline, style, watermark, watermarkText, hide }
  *   hide = 'headline' | 'subheadline' while that text is being edited inline
  *   style = { template, layout, bg1, bg2, textColor, font, headlineScale }
- *   frame = { img, geo } from frames.js
+ *   frame = { img, geo } from devices.js
  */
 export function buildComposition(layer, size, p) {
   const { width: w, height: h } = size;

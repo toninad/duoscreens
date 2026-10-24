@@ -459,3 +459,13 @@ details[open] summary { margin-bottom: 12px; }
 }
 @media (max-width: 380px) { .brand-title { display: none; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* Devices popover: a row per device; its finish and orientation show once it's on */
+.device-pop { width: 380px; }
+.device-row { padding: 12px 16px; border-top: .5px solid var(--hairline); }
+.device-head { display: flex; align-items: baseline; gap: 10px; cursor: pointer; }
+.device-head input { accent-color: var(--orange); width: 16px; height: 16px; align-self: center; margin: 0; flex: none; }
+.device-name { font-weight: 600; }
+.device-head .muted { margin-left: auto; font-size: 13px; }
+.device-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 2px 26px; }
+.device-opts .finish-name { margin-right: auto; }

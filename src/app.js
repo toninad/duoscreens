@@ -1,6 +1,6 @@
 /* global Konva, JSZip */
-import { DUO_SIZES, PRO, WATERMARK_TEXT, LANGUAGES } from './config.js';
-import { DEVICE_COLORS, loadFrames, getFrame } from './frames.js';
+import { PRO, WATERMARK_TEXT, LANGUAGES } from './config.js';
+import { DEVICES, TARGETS, SCREENS, targetById, deviceById, loadFrames, getFrame } from './devices.js';
 import { TEMPLATES, LAYOUTS, FONTS, templateById } from './templates.js';
 import { buildComposition } from './render.js';
 import { canvasToRgbPng } from './png.js';
@@ -11,18 +11,22 @@ import { makeSampleScreenshot, SAMPLE_SHOTS } from './sample.js';
 const $ = (id) => document.getElementById(id);
 const svg = (d) => `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${d}"/></svg>`;
 const ICONS = { del: svg('M5 5l6 6M11 5l-6 6') };
-const DISPLAYS = ['inner', 'outer'];
-const sizeOf = (d) => DUO_SIZES[d][state.pose[d]];
+// A target is one App Store size: a device display such as "duo/inner" or "iphone-air/main".
+const activeTargets = () => TARGETS.filter(t => state.devices.includes(t.device.id));
+const sizeOf = (tid) => targetById(tid).display.size[state.pose[tid]];
+const targetLabel = (t) => t.display.label ? `${t.device.name} · ${t.display.label}` : t.device.name;
 
 const state = {
-  shots: [],            // { id, name, image, outerImage, variants?, style?: overrides, text: { [lang]: { headline, subheadline } } }
+  shots: [],            // { id, name, image, images: { [screen]: img }, variants?, style?: overrides, text: { [lang]: { headline, subheadline } } }
   selection: new Set(), // shot ids; empty means "all screenshots" for toolbar edits
   baseLang: 'en',
   langs: ['en'],
   style: null,
   licensed: false,
-  pose: { inner: 'portrait', outer: 'portrait' },   // App Store Connect takes either orientation per display
-  deviceColor: DEVICE_COLORS[0].id,
+  devices: ['duo'],     // devices to make screenshots for, in board order
+  pose: Object.fromEntries(TARGETS.map(t => [t.id, 'portrait'])),   // App Store Connect takes either orientation per size
+  colors: {},           // device id -> finish id
+  available: {},        // device id -> finishes that have frame files
 };
 let nextId = 1;
 
@@ -60,10 +64,32 @@ function syncToolbar() {
   $('scopeLabel').textContent = !sel.length ? 'All screenshots'
     : sel.length === 1 ? `Screenshot ${state.shots.indexOf(sel[0]) + 1}` : `${sel.length} selected`;
   $('scopeLabel').classList.toggle('on', sel.length > 0);
-  const one = sel.length === 1 ? sel[0] : null;
-  $('outerFile').disabled = !one;
-  $('outerValue').textContent = !one ? 'Select one screenshot' : one.outerImage ? 'Custom image' : one.variants ? 'Cover capture' : 'Same image';
-  $('outerValue').parentElement.setAttribute('aria-disabled', String(!one));
+  renderScreenRows(sel.length === 1 ? sel[0] : null);
+}
+
+// Style popover: one row per screen in use, to give the selected screenshot its own capture there
+// (say, a real cover-screen capture for the Duo's outer display, or an iPhone capture).
+function renderScreenRows(one) {
+  const box = $('screenRows');
+  box.innerHTML = '';
+  const screens = [...new Set(activeTargets().map(t => t.display.screen))];
+  if (screens.length < 2 && !one?.images?.[screens[0]]) return;
+  for (const screen of screens) {
+    const row = el('label', 'cell row-cell chevron');
+    row.innerHTML = '<span></span><span class="value"></span><input type="file" accept="image/png,image/jpeg,image/webp" hidden>';
+    row.firstChild.textContent = SCREENS[screen];
+    row.children[1].textContent = !one ? 'Select one screenshot' : one.images?.[screen] ? 'Own image' : one.variants?.[screen] ? 'Sample capture' : 'Same image';
+    row.setAttribute('aria-disabled', String(!one));
+    row.title = `Use a different capture on the ${SCREENS[screen]}`;
+    const input = row.querySelector('input');
+    input.dataset.screen = screen;
+    input.disabled = !one;
+    input.onchange = async (e) => {
+      if (one && e.target.files[0]) { one.images = { ...(one.images || {}), [screen]: await loadImage(e.target.files[0]) }; refresh(); }
+      e.target.value = '';
+    };
+    box.appendChild(row);
+  }
 }
 
 // ---------- UI: templates ----------
@@ -124,26 +150,34 @@ function textFor(shot, lang) {
   return shot.text[lang] || shot.text[state.baseLang] || { headline: '', subheadline: '' };
 }
 
-function compositionProps(shot, display, lang) {
+// The capture shown on a screen: the screenshot's own image for it, then a sample capture in the
+// matching pose (iPhones borrow the Duo's phone-shaped outer captures), then the main image.
+function imageFor(shot, screen, pose) {
+  const v = shot.variants || {};
+  const pick = (k) => v[k]?.[pose] || v[k]?.portrait;
+  return shot.images?.[screen] || v[screen]?.[pose] || (screen === 'iphone' && pick('duo/outer')) || shot.image;
+}
+
+function compositionProps(shot, tid, lang) {
   const t = textFor(shot, lang);
+  const target = targetById(tid), pose = state.pose[tid];
   return {
-    image: shot.variants?.[display]?.[state.pose[display]]
-      || (display === 'outer' && shot.outerImage) || shot.image,
-    frame: getFrame(state.deviceColor, display, state.pose[display]),
+    image: imageFor(shot, target.display.screen, pose),
+    frame: getFrame(target.device.id, state.colors[target.device.id], target.display.id, pose),
     headline: t.headline, subheadline: t.subheadline,
     style: styleOf(shot), watermark: !state.licensed, watermarkText: WATERMARK_TEXT,
   };
 }
 
 // ---------- Board ----------
-// One canvas for everything: a row per language, a card per screenshot (its inner and outer display),
+// One canvas for everything: a row per language, a card per screenshot (a frame per App Store size),
 // pan with scroll or drag, zoom with pinch or ⌘ + scroll. Frames are drawn at board scale K and
 // re-rasterized at the current zoom so text stays sharp.
 const K = 440 / 2853;                 // board units per export pixel: an inner portrait frame is 440 units tall
 const view = { x: 0, y: 0, z: 1 };
-const frames = new Map();             // `${shotId}:${lang}:${display}` -> { stage, layer, el, shotId, lang, display, nodes, hits }
+const frames = new Map();             // `${shotId}:${lang}:${target}` -> { stage, layer, el, shotId, lang, target, nodes, hits }
 let structureKey = '';
-let editing = null;                   // { shotId, lang, display, key }
+let editing = null;                   // { shotId, lang, target, key }
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const el = (tag, cls, html = '') => { const e = document.createElement(tag); if (cls) e.className = cls; e.innerHTML = html; return e; };
@@ -247,17 +281,18 @@ function buildStructure() {
         else if (a === 'del') deleteShot(shot.id);
       };
       const framesEl = card.querySelector('.card-frames');
-      for (const d of DISPLAYS) {
-        const size = sizeOf(d);
+      for (const t of activeTargets()) {
+        const size = sizeOf(t.id);
         const fr = el('div', 'frame', '<div class="frame-stage"></div><div class="text-hits"></div>');
-        fr.dataset.display = d;
+        fr.dataset.target = t.id;
+        if (t.device.id === 'duo') fr.dataset.display = t.display.id;
         fr.style.width = `${Math.round(size.width * K)}px`;
         fr.style.height = `${Math.round(size.height * K)}px`;
         const wrap = el('figure', 'frame-wrap');
         wrap.appendChild(fr);
         if (lang === state.baseLang) {
           const cap = el('figcaption', 'frame-cap');
-          cap.textContent = `${d === 'inner' ? 'Inner' : 'Outer'} · ${size.width} × ${size.height}`;
+          cap.textContent = `${targetLabel(t)} · ${size.width} × ${size.height}`;
           wrap.appendChild(cap);
         }
         framesEl.appendChild(wrap);
@@ -265,7 +300,7 @@ function buildStructure() {
         const layer = new Konva.Layer({ listening: false });
         layer.scale({ x: K, y: K });
         stage.add(layer);
-        frames.set(`${shot.id}:${lang}:${d}`, { stage, layer, el: fr, shotId: shot.id, lang, display: d, pr: 0 });
+        frames.set(`${shot.id}:${lang}:${t.id}`, { stage, layer, el: fr, shotId: shot.id, lang, target: t.id, pr: 0 });
       }
       cards.appendChild(card);
     });
@@ -296,8 +331,8 @@ function drawAll() {
   for (const f of frames.values()) {
     const shot = state.shots.find(s => s.id === f.shotId);
     if (!shot) continue;
-    const mine = editing && editing.shotId === f.shotId && editing.lang === f.lang && editing.display === f.display;
-    f.nodes = buildComposition(f.layer, sizeOf(f.display), { ...compositionProps(shot, f.display, f.lang), hide: mine ? editing.key : null });
+    const mine = editing && editing.shotId === f.shotId && editing.lang === f.lang && editing.target === f.target;
+    f.nodes = buildComposition(f.layer, sizeOf(f.target), { ...compositionProps(shot, f.target, f.lang), hide: mine ? editing.key : null });
     placeTextHits(f);
   }
   if (editing) positionEditor();
@@ -309,9 +344,11 @@ function renderBoard({ fit = false } = {}) {
   for (const id of ['board', 'dock', 'boardTools', 'zoomTools']) $(id).hidden = !has;
   $('exportBtn').disabled = !has;
   $('langLabel').textContent = state.langs.length > 1 ? `${state.langs.length} languages` : 'Translate';
-  $('sizeInfo').textContent = `Inner ${sizeOf('inner').width} × ${sizeOf('inner').height} · Outer ${sizeOf('outer').width} × ${sizeOf('outer').height}`;
+  const targets = activeTargets();
+  $('sizeInfo').textContent = targets.length > 2 ? `${targets.length} App Store sizes`
+    : targets.map(t => `${t.display.label || t.device.name} ${sizeOf(t.id).width} × ${sizeOf(t.id).height}`).join(' · ');
   if (!has) return;
-  const key = JSON.stringify([state.shots.map(s => s.id), state.langs, state.pose]);
+  const key = JSON.stringify([state.shots.map(s => s.id), state.langs, state.devices, state.pose]);
   if (key !== structureKey) { buildStructure(); structureKey = key; requestAnimationFrame(schedulePixelRatio); }
   syncSelectionUI();
   drawAll();
@@ -388,7 +425,7 @@ function placeTextHits(f) {
 }
 
 function startEditing(f, key) {
-  editing = { shotId: f.shotId, lang: f.lang, display: f.display, key };
+  editing = { shotId: f.shotId, lang: f.lang, target: f.target, key };
   const shot = state.shots.find(s => s.id === f.shotId);
   if (!state.selection.has(f.shotId) || state.selection.size > 1) { state.selection = new Set([f.shotId]); syncSelectionUI(); }
   const ed = $('inlineEditor');
@@ -402,7 +439,7 @@ function startEditing(f, key) {
 }
 
 function editingFrame() {
-  return editing && frames.get(`${editing.shotId}:${editing.lang}:${editing.display}`);
+  return editing && frames.get(`${editing.shotId}:${editing.lang}:${editing.target}`);
 }
 
 function positionEditor() {
@@ -544,7 +581,7 @@ async function addFiles(files) {
     try {
       const img = await loadImage(f);
       const [headline, subheadline] = DEFAULT_COPY[state.shots.length % DEFAULT_COPY.length];
-      state.shots.push({ id: nextId++, name: f.name, image: img, outerImage: null, text: { [state.baseLang]: { headline, subheadline } } });
+      state.shots.push({ id: nextId++, name: f.name, image: img, images: {}, text: { [state.baseLang]: { headline, subheadline } } });
     } catch (e) { toast(e.message); }
   }
   refresh({ fit: true });
@@ -561,11 +598,14 @@ const loadUrl = (src) => new Promise((resolve) => {
 async function loadSampleShots() {
   const shots = [];
   for (const s of SAMPLE_SHOTS) {
-    const variants = { inner: {}, outer: {} };
-    for (const d of ['inner', 'outer']) for (const [pose, src] of Object.entries(s[d])) variants[d][pose] = await loadUrl(src);
-    const image = variants.inner.landscape || variants.inner.portrait || variants.outer.portrait;
+    const variants = {};
+    for (const [screen, poses] of Object.entries(s.captures)) {
+      variants[screen] = {};
+      for (const [pose, src] of Object.entries(poses)) variants[screen][pose] = await loadUrl(src);
+    }
+    const image = variants['duo/inner']?.landscape || variants['duo/inner']?.portrait || variants['duo/outer']?.portrait;
     if (!image) return [];
-    shots.push({ id: nextId++, name: 'HearHere sample', image, outerImage: null, variants,
+    shots.push({ id: nextId++, name: 'HearHere sample', image, images: {}, variants,
       text: { [state.baseLang]: { headline: s.headline, subheadline: s.subheadline } } });
   }
   return shots;
@@ -585,12 +625,12 @@ function setupDropzone() {
     const shots = await loadSampleShots();
     if (shots.length) {
       // The captures were taken unfolded in landscape, so show the inner display that way.
-      if (shots.some(s => s.variants.inner.landscape)) state.pose.inner = 'landscape';
+      if (shots.some(s => s.variants['duo/inner']?.landscape)) state.pose['duo/inner'] = 'landscape';
       state.shots.push(...shots);
       syncDeviceInputs();
       return refresh({ fit: true });
     }
-    const { width, height } = sizeOf('inner');   // match the current inner pose, so nothing is cropped
+    const { width, height } = sizeOf(activeTargets()[0].id);   // match the first size, so nothing is cropped
     const blob = await makeSampleScreenshot(width, height);
     addFiles([new File([blob], 'sample-screenshot.png', { type: 'image/png' })]);
   };
@@ -605,40 +645,87 @@ function setupInputs() {
   const fs = $('fontSelect');
   for (const [k, f] of Object.entries(FONTS)) fs.add(new Option(f.label, k));
   fs.onchange = (e) => applyStyle({ font: e.target.value });
-  $('outerFile').onchange = async (e) => {
-    const s = selectedShots()[0];
-    if (s && e.target.files[0]) { s.outerImage = await loadImage(e.target.files[0]); refresh(); }
-    e.target.value = '';
-  };
   window.addEventListener('resize', () => renderBoard());
 }
 
-// ---------- Device: pose and color ----------
+// ---------- Devices: which ones, their finish and pose ----------
+const POSE_ICON = {
+  portrait: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6" y="3" width="8" height="14" rx="2.2"/></svg>',
+  landscape: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="6" width="14" height="8" rx="2.2"/></svg>',
+};
+
 function syncDeviceInputs() {
-  for (const seg of document.querySelectorAll('.segmented[data-pose]')) {
-    for (const b of seg.children) b.setAttribute('aria-pressed', String(b.dataset.v === state.pose[seg.dataset.pose]));
-  }
-  for (const b of $('colorSwatches').children) b.setAttribute('aria-pressed', String(b.dataset.color === state.deviceColor));
-  $('colorName').textContent = DEVICE_COLORS.find(c => c.id === state.deviceColor)?.name || '';
+  const on = DEVICES.filter(d => state.devices.includes(d.id));
+  $('devicesLabel').textContent = on.length === 1 ? on[0].name : `${on[0].name} + ${on.length - 1}`;
+  renderDeviceList();
 }
-function setupDevice(colors) {
-  for (const seg of document.querySelectorAll('.segmented[data-pose]')) {
-    seg.onclick = (e) => {
-      const v = e.target.closest('button')?.dataset.v;
-      if (!v) return;
-      state.pose[seg.dataset.pose] = v;
-      syncDeviceInputs();
-      renderBoard({ fit: true });
-    };
+
+function renderDeviceList() {
+  const list = $('deviceList');
+  list.innerHTML = '';
+  for (const d of DEVICES) {
+    const colors = state.available[d.id];
+    if (!colors?.length) continue;
+    const on = state.devices.includes(d.id);
+    const row = el('div', 'device-row' + (on ? ' on' : ''));
+    row.dataset.device = d.id;
+    row.innerHTML = '<label class="device-head"><input type="checkbox"><span class="device-name"></span><span class="muted"></span></label>';
+    const box = row.querySelector('input');
+    box.checked = on;
+    box.disabled = on && state.devices.length === 1;   // keep at least one
+    box.onchange = () => toggleDevice(d.id, box.checked);
+    row.querySelector('.device-name').textContent = d.name;
+    row.querySelector('.muted').textContent = d.note;
+    if (on) {
+      const opts = el('div', 'device-opts');
+      const sw = el('span', 'swatches');
+      sw.dataset.device = d.id;
+      for (const c of colors) {
+        const b = el('button');
+        b.type = 'button'; b.dataset.color = c.id; b.title = c.name; b.setAttribute('aria-label', c.name);
+        b.setAttribute('aria-pressed', String(state.colors[d.id] === c.id));
+        b.style.setProperty('--swatch', c.swatch);
+        b.onclick = () => { state.colors[d.id] = c.id; syncDeviceInputs(); renderBoard(); };
+        sw.appendChild(b);
+      }
+      const name = el('span', 'dock-label finish-name');
+      name.textContent = colors.find(c => c.id === state.colors[d.id])?.name || '';
+      opts.append(sw, name);
+      for (const x of d.displays) {
+        const tid = `${d.id}/${x.id}`;
+        const seg = el('div', 'segmented');
+        seg.dataset.pose = tid;
+        seg.setAttribute('role', 'group');
+        seg.setAttribute('aria-label', `${d.name} ${x.label} orientation`.replace(/\s+/g, ' '));
+        for (const v of ['portrait', 'landscape']) {
+          const b = el('button', '', POSE_ICON[v]);
+          b.type = 'button'; b.dataset.v = v; b.title = `${x.label || d.name}: ${v}`; b.setAttribute('aria-label', v);
+          b.setAttribute('aria-pressed', String(state.pose[tid] === v));
+          b.onclick = () => { state.pose[tid] = v; syncDeviceInputs(); renderBoard({ fit: true }); };
+          seg.appendChild(b);
+        }
+        if (x.label) { const l = el('span', 'dock-label'); l.textContent = x.label; opts.appendChild(l); }
+        opts.appendChild(seg);
+      }
+      row.appendChild(opts);
+    }
+    list.appendChild(row);
   }
-  const sw = $('colorSwatches');
-  for (const c of colors) {
-    const b = document.createElement('button');
-    b.type = 'button'; b.dataset.color = c.id; b.title = c.name; b.setAttribute('aria-label', c.name);
-    b.style.setProperty('--swatch', c.swatch);
-    b.onclick = () => { state.deviceColor = c.id; syncDeviceInputs(); renderBoard(); };
-    sw.appendChild(b);
-  }
+}
+
+function toggleDevice(id, on) {
+  if (on && !state.devices.includes(id)) state.devices = DEVICES.map(d => d.id).filter(d => d === id || state.devices.includes(d));
+  if (!on && state.devices.length > 1) state.devices = state.devices.filter(d => d !== id);
+  syncDeviceInputs();
+  syncToolbar();
+  renderBoard({ fit: true });
+}
+
+function setupDevice(available) {
+  state.available = available;
+  for (const [id, colors] of Object.entries(available)) state.colors[id] = colors[0].id;
+  state.devices = state.devices.filter(id => available[id]);
+  if (!state.devices.length) state.devices = [Object.keys(available)[0] || 'duo'];
   syncDeviceInputs();
 }
 
@@ -788,8 +875,14 @@ function setupLicense() {
 }
 
 // ---------- Export ----------
-async function renderToPng(shot, display, lang) {
-  const size = sizeOf(display);
+// "iPhone-Duo-inner-2853x2007", "iPhone-Air-1260x2736": one folder per App Store size.
+const folderName = (t) => {
+  const { width, height } = sizeOf(t.id);
+  return `${t.device.name.replace(/\s+/g, '-')}${t.display.label ? '-' + t.display.id : ''}-${width}x${height}`;
+};
+
+async function renderToPng(shot, tid, lang) {
+  const size = sizeOf(tid);
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;left:-99999px;top:0;';
   document.body.appendChild(host);
@@ -797,7 +890,7 @@ async function renderToPng(shot, display, lang) {
   const layer = new Konva.Layer({ listening: false });
   stage.add(layer);
   try {
-    buildComposition(layer, size, compositionProps(shot, display, lang));
+    buildComposition(layer, size, compositionProps(shot, tid, lang));
     const canvas = stage.toCanvas({ pixelRatio: 1 });
     if (canvas.width !== size.width || canvas.height !== size.height) throw new Error(`Rendered ${canvas.width}×${canvas.height}, expected ${size.width}×${size.height}`);
     return await canvasToRgbPng(canvas);
@@ -812,25 +905,26 @@ async function exportZip() {
   btn.disabled = true;
   const zip = new JSZip();
   const jobs = [];
-  for (const lang of state.langs) state.shots.forEach((s, i) => DISPLAYS.forEach(d => jobs.push({ lang, s, i, d })));
+  const targets = activeTargets();
+  for (const lang of state.langs) state.shots.forEach((s, i) => targets.forEach(t => jobs.push({ lang, s, i, t })));
   showProgress(0, jobs.length);
   try {
     let done = 0;
-    for (const { lang, s, i, d } of jobs) {
-      const { width, height } = sizeOf(d);
-      const blob = await renderToPng(s, d, lang);
+    for (const { lang, s, i, t } of jobs) {
+      const { width, height } = sizeOf(t.id);
+      const blob = await renderToPng(s, t.id, lang);
       const folder = state.langs.length > 1 ? `${lang}/` : '';
-      zip.file(`${folder}iPhone-Duo-${d}-${width}x${height}/${String(i + 1).padStart(2, '0')}.png`, blob);
+      zip.file(`${folder}${folderName(t)}/${String(i + 1).padStart(2, '0')}.png`, blob);
       showProgress(++done, jobs.length);
       await new Promise(r => setTimeout(r)); // keep UI responsive
     }
-    zip.file('README.txt', `iPhone Duo App Store screenshots — made with Duo Screenshot Studio\n\n` +
-      `Inner display: ${sizeOf('inner').width}x${sizeOf('inner').height}\nOuter display: ${sizeOf('outer').width}x${sizeOf('outer').height}\n` +
-      `Upload each folder to the matching iPhone Duo slot in App Store Connect (1–10 per size).\nPNG, RGB, no alpha channel.\n`);
+    zip.file('README.txt', `App Store screenshots — made with HearHere Studio\n\n` +
+      targets.map(t => `${targetLabel(t)} (${t.device.note}): ${folderName(t)}`).join('\n') +
+      `\n\nUpload each folder to the matching device size in App Store Connect (1–10 per size).\nPNG, RGB, no alpha channel.\n`);
     const out = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(out);
-    a.download = 'iphone-duo-screenshots.zip';
+    a.download = 'app-store-screenshots.zip';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
     toast(`Exported ${jobs.length} screenshots${state.licensed ? '' : ' (with watermark — unlock to remove)'}.`);
@@ -864,10 +958,10 @@ async function boot() {
   await Promise.all([
     'Inter:400', 'Inter:600', 'Source Serif 4:500', 'Source Sans 3:400', 'Source Sans 3:600',
   ].map(s => { const [f, w] = s.split(':'); return document.fonts.load(`${w} 40px "${f}"`, 'AaČć'); })).catch(() => {});
-  const colors = await loadFrames();
+  const available = await loadFrames();
   setupInputs();
   setupInlineEditor();
-  setupDevice(colors);
+  setupDevice(available);
   state.style = { ...themePatch(templateById('paper')), layout: 'top', headlineScale: 1 };
   setupBoard();
   syncToolbar();

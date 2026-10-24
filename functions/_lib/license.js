@@ -48,7 +48,7 @@ export async function verifyLicense(env, key, device) {
 
   let activationId = activation?.activation_id;
   if (!activationId) {
-    const act = await polar(env, 'activate', { key, label: `Duo Screenshot Studio · ${device.slice(0, 8)}` });
+    const act = await polar(env, 'activate', { key, label: `HearHere Studio · ${device.slice(0, 8)}` });
     if (act.status === 404) throw new LicenseError('That license key was not found.', 404);
     if (act.status === 403) throw new LicenseError('This key is already active on the maximum number of devices.', 403);
     if (act.status >= 400 || !act.data?.id) throw new LicenseError(`License server error (${act.status}). Try again in a moment.`, 502);
