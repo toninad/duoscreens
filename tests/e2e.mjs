@@ -212,9 +212,14 @@ try {
     await page.click(`.shot-card:nth-child(${n}) .segmented[data-pose="duo/${n <= 2 ? 'inner' : 'outer'}"] [data-v="landscape"]`);
   }
   await page.keyboard.press('Escape');
-  const finishes = await page.$$eval('.swatches[data-device="duo"] button', bs => bs.map(b => b.dataset.color));
+  const openMenu = async (dev) => { await page.hover(`.group[data-device="${dev}"] .group-head`); await page.click(`.group[data-device="${dev}"] .group-more`); };
+  const finishes = await page.evaluate(() => window.__dss.state.available.duo.map(c => c.id));
   check(finishes.includes('night-sky'), `Device finishes available: ${finishes.join(', ')}`);
-  await page.click(`.swatches[data-device="duo"] [data-color="${finishes.at(-1)}"]`);
+  await openMenu('duo');
+  check(await page.isVisible('#groupMenu .menu-row:has-text("Change device")'), 'The group menu opens from the header');
+  // A finish row only appears when there's more than one to pick from.
+  if (finishes.length > 1) await page.click(`.swatches[data-device="duo"] [data-color="${finishes.at(-1)}"]`);
+  await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(out, 'landscape.png') });
   const land = await exportZip(page, 'landscape');
@@ -229,12 +234,15 @@ try {
   await page.click('#deviceDone');
   await page.waitForFunction(() => window.__dss.state.devices.join() === 'duo,iphone-18-pro-max');
   check(true, 'Add device makes a second group, an iPhone (18 Pro Max frame to start)');
-  await page.selectOption('.group[data-device="iphone-18-pro-max"] .model-select', 'iphone-air');
+  await openMenu('iphone-18-pro-max');
+  await page.click('#groupMenu .menu-row:has-text("Air")');
   await page.waitForFunction(() => window.__dss.state.devices.join() === 'duo,iphone-air');
-  check(true, 'The iPhone frame is switched on the board, in the group header');
+  check(true, 'The iPhone frame is switched from the group menu');
+  await openMenu('iphone-air');
   await page.click('.swatches[data-device="iphone-air"] [data-color="sky-blue"]');
+  await page.keyboard.press('Escape');
   await page.waitForFunction(() => window.__dss.state.colors['iphone-air'] === 'sky-blue');
-  check(true, 'The finish is picked on the board, in the group header');
+  check(true, 'The finish is picked from the group menu');
   check(!(await page.$('.segmented[data-pose="iphone-air/main"]')), 'iPhones have no orientation choice: always portrait');
   check(await page.$$eval('.group[data-device="iphone-air"] .lang-row[data-lang="en"] .shot-card .frame', fs => fs.length) === 1, 'The iPhone group starts with one empty card');
   const half = await exportZip(page, 'devices-half');

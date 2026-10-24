@@ -180,7 +180,8 @@ const PLUS = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10
 const ICON = {
   dup: svg('M5.5 5.5V4a1.5 1.5 0 0 1 1.5-1.5h5A1.5 1.5 0 0 1 13.5 4v5A1.5 1.5 0 0 1 12 10.5h-1.5M4 5.5h5A1.5 1.5 0 0 1 10.5 7v5A1.5 1.5 0 0 1 9 13.5H4A1.5 1.5 0 0 1 2.5 12V7A1.5 1.5 0 0 1 4 5.5z'),
   left: svg('M10 4l-4 4 4 4'), right: svg('M6 4l4 4-4 4'), del: svg('M5 5l6 6M11 5l-6 6'),
-  swap: svg('M3 6h9.5M10 3.5 12.5 6 10 8.5M13 10H3.5M6 7.5 3.5 10 6 12.5'),
+  more: svg('M4 8h.01M8 8h.01M12 8h.01'),
+  check: svg('M3.5 8.5l3 3 6-7'),
 };
 
 function applyView() {
@@ -384,37 +385,12 @@ function groupHead(group, device) {
   title.querySelector('.group-count').textContent = targets.length > 1
     ? targets.map(t => `${countOn(group, t.id)} ${t.display.label.toLowerCase()}`).join(' · ')
     : `${group.shots.length} of ${MAX_SHOTS}`;
+  // Everything else about the group lives in one quiet menu, so the header stays a label.
+  const more = el('button', 'group-btn icon group-more', ICON.more);
+  more.type = 'button'; more.title = `${device.name} options`; more.setAttribute('aria-label', more.title);
+  more.onclick = () => openGroupMenu(group, more);
   const tools = el('div', 'group-tools');
-  const sw = el('span', 'swatches');
-  sw.dataset.device = device.id;
-  for (const c of state.available[device.id] || []) {
-    const b = el('button');
-    b.type = 'button'; b.dataset.color = c.id; b.title = c.name; b.setAttribute('aria-label', `${device.name} finish: ${c.name}`);
-    b.setAttribute('aria-pressed', String(state.colors[device.id] === c.id));
-    b.style.setProperty('--swatch', c.swatch);
-    b.onclick = async () => { await loadFrame(device.id, c.id); state.colors[device.id] = c.id; saveDevicePrefs(); renderBoard(); };
-    sw.appendChild(b);
-  }
-  tools.appendChild(sw);
-  // iPhone: which frame (they all export the 6.9″ size), as a small dropdown.
-  const models = DEVICES.filter(d => d.family === device.family && state.available[d.id]?.length);
-  if (models.length > 1) {
-    const sel = el('select', 'group-select model-select');
-    sel.setAttribute('aria-label', 'iPhone frame');
-    for (const m of models) sel.add(new Option(m.short, m.id, false, m.id === device.id));
-    sel.onchange = () => switchModel(group, sel.value);
-    tools.appendChild(sel);
-  }
-  const change = el('button', 'group-btn icon', ICON.swap);
-  change.type = 'button'; change.title = 'Change device'; change.setAttribute('aria-label', change.title);
-  change.onclick = () => openDeviceDialog({ replace: group.id });
-  tools.appendChild(change);
-  if (state.groups.length > 1) {
-    const rm = el('button', 'group-btn icon', ICON.del);
-    rm.type = 'button'; rm.title = `Remove ${device.name} and its screenshots`; rm.setAttribute('aria-label', rm.title);
-    rm.onclick = () => removeGroup(group.id);
-    tools.appendChild(rm);
-  }
+  tools.appendChild(more);
   head.append(title, tools);
   return head;
 }
@@ -453,6 +429,7 @@ function renderBoard({ fit = false } = {}) {
   $('empty').hidden = true;
   for (const id of ['board', 'dock', 'boardTools', 'zoomTools', 'scopeLabel']) $(id).hidden = !has;
   $('exportBtn').disabled = !state.shots.some(hasAnyImage);
+  $('sampleBtn').hidden = state.shots.some(hasAnyImage);
   $('langLabel').textContent = state.langs.length > 1 ? `${state.langs.length} languages` : 'Translate';
   if (!has) return;
   const key = JSON.stringify([state.groups.map(g => [g.device, g.shots.map(s => [s.id, s.target, s.pose])]), state.langs, state.colors, state.licensed]);
@@ -511,6 +488,56 @@ async function switchModel(group, id) {
   state.models[deviceById(id).family] = id;
   saveDevicePrefs();
   refresh();
+}
+
+/** The group's options menu: which frame, its finish, change or remove the device. */
+function openGroupMenu(group, anchor) {
+  const menu = $('groupMenu'), device = deviceById(group.device);
+  menu.innerHTML = '';
+  const card = el('div', 'card menu');
+  const row = (label, onclick, cls = '') => {
+    const b = el('button', `menu-row ${cls}`, label);
+    b.type = 'button';
+    b.onclick = () => { menu.hidePopover(); onclick(); };
+    card.appendChild(b);
+    return b;
+  };
+  const models = DEVICES.filter(d => d.family === device.family && state.available[d.id]?.length);
+  if (models.length > 1) {
+    card.appendChild(el('div', 'menu-label', 'Frame'));
+    for (const m of models) {
+      const b = row(`<span>${m.name}</span>`, () => m.id !== group.device && switchModel(group, m.id));
+      if (m.id === group.device) { b.insertAdjacentHTML('beforeend', ICON.check); b.setAttribute('aria-current', 'true'); }
+    }
+  }
+  const finishes = state.available[device.id] || [];
+  if (finishes.length > 1) {
+    card.appendChild(el('div', 'menu-label', 'Finish'));
+    const sw = el('div', 'swatches menu-swatches');
+    sw.dataset.device = device.id;
+    for (const c of finishes) {
+      const b = el('button');
+      b.type = 'button'; b.dataset.color = c.id; b.title = c.name; b.setAttribute('aria-label', `${device.name} finish: ${c.name}`);
+      b.setAttribute('aria-pressed', String(state.colors[device.id] === c.id));
+      b.style.setProperty('--swatch', c.swatch);
+      b.onclick = async () => {
+        await loadFrame(device.id, c.id); state.colors[device.id] = c.id; saveDevicePrefs(); renderBoard();
+        for (const x of sw.children) x.setAttribute('aria-pressed', String(x === b));
+      };
+      sw.appendChild(b);
+    }
+    card.appendChild(sw);
+  }
+  card.appendChild(el('hr', 'menu-rule'));
+  row('Change device…', () => openDeviceDialog({ replace: group.id }));
+  if (state.groups.length > 1) row(`Remove ${device.name}`, () => removeGroup(group.id), 'danger');
+  menu.appendChild(card);
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = `${Math.min(r.left, innerWidth - 232)}px`;
+  menu.style.top = `${r.bottom + 6}px`;
+  menu.showPopover();
+  anchor.classList.add('open');
+  menu.addEventListener('toggle', (e) => { if (e.newState === 'closed') anchor.classList.remove('open'); }, { once: true });
 }
 
 function removeGroup(id) {
