@@ -82,32 +82,8 @@ function syncToolbar() {
   $('scopeLabel').textContent = !sel.length ? 'All screenshots'
     : sel.length === 1 ? `${deviceById(groupOf(sel[0].id).device).name} ${groupOf(sel[0].id).shots.indexOf(sel[0]) + 1}` : `${sel.length} selected`;
   $('scopeLabel').classList.toggle('on', sel.length > 0);
-  renderScreenRows(sel.length === 1 ? sel[0] : null);
 }
 
-// Style popover: one row per screen in use, to give the selected screenshot its own capture there
-// (say, a real cover-screen capture for the Duo's outer display, or an iPhone capture).
-function renderScreenRows(one) {
-  const box = $('screenRows');
-  box.innerHTML = '';
-  const screens = [...new Set((one ? targetsOf(one) : activeTargets()).map(t => t.display.screen))];
-  for (const screen of screens) {
-    const row = el('label', 'cell row-cell chevron');
-    row.innerHTML = '<span></span><span class="value"></span><input type="file" accept="image/png,image/jpeg,image/webp" hidden>';
-    row.firstChild.textContent = SCREENS[screen];
-    row.children[1].textContent = !one ? 'Select one screenshot' : one.images?.[screen] ? 'Replace…' : 'Empty';
-    row.setAttribute('aria-disabled', String(!one));
-    row.title = `Choose the capture for the ${SCREENS[screen]}`;
-    const input = row.querySelector('input');
-    input.dataset.screen = screen;
-    input.disabled = !one;
-    input.onchange = async (e) => {
-      if (one && e.target.files[0]) { one.images = { ...(one.images || {}), [screen]: await loadImage(e.target.files[0]) }; refresh(); }
-      e.target.value = '';
-    };
-    box.appendChild(row);
-  }
-}
 
 // ---------- UI: templates ----------
 function renderTemplateGrid() {
@@ -204,6 +180,7 @@ const PLUS = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10
 const ICON = {
   dup: svg('M5.5 5.5V4a1.5 1.5 0 0 1 1.5-1.5h5A1.5 1.5 0 0 1 13.5 4v5A1.5 1.5 0 0 1 12 10.5h-1.5M4 5.5h5A1.5 1.5 0 0 1 10.5 7v5A1.5 1.5 0 0 1 9 13.5H4A1.5 1.5 0 0 1 2.5 12V7A1.5 1.5 0 0 1 4 5.5z'),
   left: svg('M10 4l-4 4 4 4'), right: svg('M6 4l4 4-4 4'), del: svg('M5 5l6 6M11 5l-6 6'),
+  swap: svg('M3 6h9.5M10 3.5 12.5 6 10 8.5M13 10H3.5M6 7.5 3.5 10 6 12.5'),
 };
 
 function applyView() {
@@ -259,7 +236,7 @@ function fitBoard() {
   const world = $('boardWorld'), board = $('board');
   if (!world.offsetWidth || !world.offsetHeight) return;
   const narrow = matchMedia('(max-width: 860px)').matches;
-  const top = narrow ? 64 : 76, bottom = narrow ? 92 : 104, side = narrow ? 16 : 48;
+  const top = narrow ? 72 : 100, bottom = narrow ? 92 : 104, side = narrow ? 16 : 48;
   const bw = board.clientWidth - side * 2, bh = board.clientHeight - top - bottom;
   // The board's labels keep their screen size, so the world's size depends on the zoom: settle it.
   let w, h;
@@ -405,8 +382,8 @@ function groupHead(group, device) {
   title.querySelector('h2').textContent = device.family === 'iphone' ? 'iPhone' : device.name;
   const targets = targetsOfDevice(device.id);
   title.querySelector('.group-count').textContent = targets.length > 1
-    ? `${targets.map(t => `${countOn(group, t.id)} ${t.display.label.toLowerCase()}`).join(' · ')} · up to ${MAX_SHOTS} each`
-    : `${group.shots.length} of ${MAX_SHOTS} · ${device.short} frame · 6.9″ display`;
+    ? targets.map(t => `${countOn(group, t.id)} ${t.display.label.toLowerCase()}`).join(' · ')
+    : `${group.shots.length} of ${MAX_SHOTS}`;
   const tools = el('div', 'group-tools');
   const sw = el('span', 'swatches');
   sw.dataset.device = device.id;
@@ -428,8 +405,8 @@ function groupHead(group, device) {
     sel.onchange = () => switchModel(group, sel.value);
     tools.appendChild(sel);
   }
-  const change = el('button', 'group-btn', 'Change device');
-  change.type = 'button';
+  const change = el('button', 'group-btn icon', ICON.swap);
+  change.type = 'button'; change.title = 'Change device'; change.setAttribute('aria-label', change.title);
   change.onclick = () => openDeviceDialog({ replace: group.id });
   tools.appendChild(change);
   if (state.groups.length > 1) {
@@ -474,11 +451,9 @@ function renderBoard({ fit = false } = {}) {
   for (const g of state.groups) if (!g.shots.length) g.shots.push(newShot(g));   // every group has a card to fill
   const has = true;
   $('empty').hidden = true;
-  for (const id of ['board', 'dock', 'boardTools', 'zoomTools']) $(id).hidden = !has;
+  for (const id of ['board', 'dock', 'boardTools', 'zoomTools', 'scopeLabel']) $(id).hidden = !has;
   $('exportBtn').disabled = !state.shots.some(hasAnyImage);
   $('langLabel').textContent = state.langs.length > 1 ? `${state.langs.length} languages` : 'Translate';
-  const targets = activeTargets();
-  $('sizeInfo').textContent = `${targets.length} App Store size${targets.length > 1 ? 's' : ''}`;
   if (!has) return;
   const key = JSON.stringify([state.groups.map(g => [g.device, g.shots.map(s => [s.id, s.target, s.pose])]), state.langs, state.colors, state.licensed]);
   if (key !== structureKey) { buildStructure(); structureKey = key; requestAnimationFrame(schedulePixelRatio); }

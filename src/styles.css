@@ -713,3 +713,46 @@ details[open] summary { margin-bottom: 12px; }
 .group .card-btn.del:hover { color: #c0392b; }
 .group .card-move { left: 50%; transform: translate(-50%, -50%); display: flex; padding: 1px; border-radius: 999px; }
 .group .card-move button { width: 28px; height: 26px; border-radius: 999px; }
+
+/* Floating top bar: no full-width strip. Brand and Add on the left, the scope in the middle, the
+   account and export pill on the right; the board runs underneath. */
+body { display: block; height: 100dvh; }
+.layout { height: 100%; }
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 6; pointer-events: none;
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px;
+  padding: max(14px, env(safe-area-inset-top)) 16px 0; background: none; border: 0;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+.topbar > * { pointer-events: auto; }
+.top-left { display: flex; align-items: center; gap: 10px; min-width: 0; justify-self: start; }
+.top-left .brand, .topbar-actions, .top-center {
+  height: 46px; padding: 0 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 80%, transparent);
+  backdrop-filter: blur(20px) saturate(1.6); -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  box-shadow: 0 0 0 .5px var(--hairline), 0 8px 24px -10px rgba(0,0,0,.25);
+}
+.top-left .brand { padding: 0 16px; }
+.topbar-actions { justify-self: end; gap: 6px; padding: 0 5px; }
+.top-center { justify-self: center; display: flex; align-items: center; height: 34px; padding: 0 14px; }
+.top-center:has(.scope-chip[hidden]) { display: none; }
+.top-center .scope-chip { padding: 0; font-size: 12.5px; }
+.board-tools { position: static; }
+.board-tools .board-add { height: 46px; }
+.pop-down { top: 70px; }
+
+/* Group header: the name and a count; its controls only on hover. */
+.group-tools { opacity: 0; }
+.group:hover .group-tools, .group-tools:focus-within { opacity: 1; }
+.group-btn.icon svg { width: 14px; height: 14px; }
+
+@media (max-width: 860px) {
+  .topbar { grid-template-columns: 1fr auto; padding: max(10px, env(safe-area-inset-top)) 10px 0; }
+  .top-center { display: none; }
+  .top-left .brand { padding: 0 12px; height: 40px; }
+  .board-tools .board-add { height: 40px; width: 40px; padding: 0; justify-content: center; }
+  .board-add span, .board-link { display: none; }
+  .topbar-actions { height: 40px; }
+  .zoom-tools { top: auto; bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .group-tools { opacity: 1; }
+}
