@@ -37,15 +37,16 @@ async function exportZip(page, label) {
   return { file, zip: await JSZip.loadAsync(await fs.readFile(file)) };
 }
 
+const dimsOf = {};   // PNG name -> "WxH", filled by verifyZip
 async function verifyZip(zip, label, expectedCount) {
   const pngs = Object.keys(zip.files).filter(n => n.endsWith('.png')).sort();
   check(pngs.length === expectedCount, `${label}: ZIP has ${pngs.length} PNGs (expected ${expectedCount}): ${pngs.join(', ')}`);
   for (const name of pngs) {
     const info = pngInfo(Buffer.from(await zip.file(name).async('uint8array')));
-    const [, device, folder] = name.match(/(iPhone-[\w-]+?)-(\d+x\d+)\//);
-    const [w, h] = folder.split('x').map(Number);
-    check(VALID[device]?.includes(folder), `${label}: ${folder} is an App Store size for ${device}`);
-    check(info.sig && info.width === w && info.height === h, `${label}: ${name} is ${info.width}×${info.height} (expected ${w}×${h})`);
+    const [, device] = name.match(/(iPhone-[^/]+)\/\d+\.png$/);
+    const dims = `${info.width}x${info.height}`;
+    dimsOf[name] = dims;
+    check(info.sig && VALID[device]?.includes(dims), `${label}: ${name} is ${dims}, an App Store size for ${device}`);
     check(info.colorType === 2 && info.bitDepth === 8, `${label}: ${name} is 8-bit RGB without alpha (colorType=${info.colorType})`);
   }
   return pngs;
@@ -188,20 +189,25 @@ try {
   // Pro export: 3 languages × 2 shots × 2 displays = 12, no watermark
   const pro = await exportZip(page, 'pro');
   const proPngs = await verifyZip(pro.zip, 'pro', 12);
-  const freeInner = freePngs.find(n => n.includes('-inner-') && n.endsWith('01.png'));
-  const proInner = proPngs.find(n => n.startsWith('en/') && n.includes('-inner-') && n.endsWith('01.png'));
+  const freeInner = freePngs.find(n => n.includes('-inner/') && n.endsWith('01.png'));
+  const proInner = proPngs.find(n => n.startsWith('en/') && n.includes('-inner/') && n.endsWith('01.png'));
   const a = await free.zip.file(freeInner).async('nodebuffer');
   const b = await pro.zip.file(proInner).async('nodebuffer');
   check(!a.equals(b), 'Watermark removed after unlock (free and pro renders differ)');
   await fs.writeFile(path.join(root, 'docs', 'sample-export.png'), b);
-  const outerName = freePngs.find(n => n.includes('-outer-') && n.endsWith('01.png'));
+  const outerName = freePngs.find(n => n.includes('-outer/') && n.endsWith('01.png'));
   await fs.writeFile(path.join(root, 'docs', 'sample-export-outer-free.png'), await free.zip.file(outerName).async('nodebuffer'));
-  const deInner = proPngs.find(n => n.startsWith('de/') && n.includes('-inner-') && n.endsWith('02.png'));
+  const deInner = proPngs.find(n => n.startsWith('de/') && n.includes('-inner/') && n.endsWith('02.png'));
   await fs.writeFile(path.join(out, 'de-inner-02.png'), await pro.zip.file(deInner).async('nodebuffer'));
 
   // Landscape poses export Apple's landscape sizes, in both finishes.
-  await page.click('.segmented[data-pose="duo/inner"] [data-v="landscape"]');
-  await page.click('.segmented[data-pose="duo/outer"] [data-v="landscape"]');
+  // Orientation is per screenshot: select a card and pick it for each display in its header.
+  for (const n of [1, 2]) {
+    await page.click(`.shot-card:nth-child(${n}) .card-num`);
+    await page.click(`.shot-card:nth-child(${n}) .segmented[data-pose="duo/inner"] [data-v="landscape"]`);
+    await page.click(`.shot-card:nth-child(${n}) .segmented[data-pose="duo/outer"] [data-v="landscape"]`);
+  }
+  await page.keyboard.press('Escape');
   const finishes = await page.$$eval('.swatches[data-device="duo"] button', bs => bs.map(b => b.dataset.color));
   check(finishes.includes('night-sky'), `Device finishes available: ${finishes.join(', ')}`);
   await page.click(`.swatches[data-device="duo"] [data-color="${finishes.at(-1)}"]`);
@@ -209,7 +215,7 @@ try {
   await page.screenshot({ path: path.join(out, 'landscape.png') });
   const land = await exportZip(page, 'landscape');
   const landPngs = await verifyZip(land.zip, 'landscape', 12);
-  check(landPngs.every(n => n.includes('2853x2007') || n.includes('2034x1398')), 'Landscape export uses 2853×2007 and 2034×1398');
+  check(landPngs.every(n => dimsOf[n] === '2853x2007' || dimsOf[n] === '2034x1398'), 'Landscape export uses 2853×2007 and 2034×1398');
 
   // iPhone: tick it, then pick one model. Its size joins the Duo's on every screenshot, in every language.
   await page.click('.add-group');
@@ -239,7 +245,7 @@ try {
   await page.screenshot({ path: path.join(out, 'devices.png') });
   const all = await exportZip(page, 'devices');
   const allPngs = await verifyZip(all.zip, 'devices', 18);
-  const air = allPngs.find(n => n.startsWith('en/iPhone-Air-1260x2736/01'));
+  const air = allPngs.find(n => n.startsWith('en/iPhone-Air/01') && dimsOf[n] === '1260x2736');
   check(!!air, 'iPhone Air export is 1260×2736');
   if (air) await fs.writeFile(path.join(out, 'iphone-air-01.png'), await all.zip.file(air).async('nodebuffer'));
 

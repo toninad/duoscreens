@@ -17,7 +17,9 @@ const targetsOfDevice = (id) => TARGETS.filter(t => t.device.id === id);
 const MAX_SHOTS = 10;   // App Store Connect takes up to 10 screenshots per size
 const groupOf = (shotId) => state.groups.find(g => g.shots.some(s => s.id === shotId));
 const targetsOf = (shot) => targetsOfDevice(groupOf(shot.id)?.device);
-const sizeOf = (tid) => targetById(tid).display.size[state.pose[tid]];
+// Each screenshot card has its own orientation per display (iPhones are always portrait).
+const poseOf = (shot, tid) => (targetById(tid).display.poses?.length === 1 ? 'portrait' : shot?.pose?.[tid] || 'portrait');
+const sizeOf = (tid, shot) => targetById(tid).display.size[poseOf(shot, tid)];
 const targetLabel = (t) => t.display.label ? `${t.device.name} · ${t.display.label}` : t.device.name;
 
 const state = {
@@ -33,7 +35,6 @@ const state = {
   style: null,
   licensed: false,
   models: {},           // family id -> the model last picked in the device picker
-  pose: Object.fromEntries(TARGETS.map(t => [t.id, 'portrait'])),   // App Store Connect takes either orientation per size
   colors: {},           // device id -> finish id
   available: {},        // device id -> finishes that have frame files
 };
@@ -170,11 +171,11 @@ function imageFor(shot, screen, pose) {
   const v = shot.variants?.[screen];
   return shot.images?.[screen] || v?.[pose] || v?.portrait || v?.landscape || null;
 }
-const hasAnyImage = (shot) => targetsOf(shot).some(t => imageFor(shot, t.display.screen, state.pose[t.id]));
+const hasAnyImage = (shot) => targetsOf(shot).some(t => imageFor(shot, t.display.screen, poseOf(shot, t.id)));
 
 function compositionProps(shot, tid, lang) {
   const t = textFor(shot, lang, targetById(tid).display.screen);
-  const target = targetById(tid), pose = state.pose[tid];
+  const target = targetById(tid), pose = poseOf(shot, tid);
   return {
     image: imageFor(shot, target.display.screen, pose),
     frame: getFrame(target.device.id, state.colors[target.device.id], target.display.id, pose),
@@ -295,7 +296,7 @@ function buildStructure() {
       group.shots.forEach((shot, i) => {
         const card = el('article', 'shot-card');
         card.dataset.id = shot.id;
-        card.innerHTML = `<header class="card-head"><span class="card-num">${pad2(i + 1)}</span><span class="card-tag"></span>
+        card.innerHTML = `<header class="card-head"><span class="card-num">${pad2(i + 1)}</span><span class="card-tag"></span><span class="card-pose"></span>
           <span class="card-tools">
             <button type="button" data-a="dup" title="Duplicate as a variation" aria-label="Duplicate" ${group.shots.length >= MAX_SHOTS ? 'disabled' : ''}>${ICON.dup}</button>
             <button type="button" data-a="left" title="Move left" aria-label="Move left" ${i === 0 ? 'disabled' : ''}>${ICON.left}</button>
@@ -309,9 +310,27 @@ function buildStructure() {
           else if (a === 'right') moveShot(shot.id, 1);
           else if (a === 'del') deleteShot(shot.id);
         };
+        const poseBox = card.querySelector('.card-pose');
+        for (const t of targets.filter(x => !(x.display.poses?.length === 1))) {   // this card's orientation, shown when selected
+          const seg = el('div', 'segmented');
+          seg.dataset.pose = t.id;
+          seg.setAttribute('role', 'group');
+          seg.setAttribute('aria-label', `${t.display.label} display orientation`);
+          for (const v of ['portrait', 'landscape']) {
+            const b = el('button', '', POSE_ICON[v]);
+            b.type = 'button'; b.dataset.v = v; b.setAttribute('aria-label', `${t.display.label} ${v}`);
+            b.title = `${t.display.label}: ${v}, ${t.display.size[v].width} × ${t.display.size[v].height}`;
+            b.setAttribute('aria-pressed', String(poseOf(shot, t.id) === v));
+            b.onclick = (e) => { e.stopPropagation(); shot.pose = { ...shot.pose, [t.id]: v }; renderBoard(); };
+            seg.appendChild(b);
+          }
+          const l = el('span', 'pose-label');
+          l.textContent = t.display.label;
+          poseBox.append(l, seg);
+        }
         const framesEl = card.querySelector('.card-frames');
         for (const t of targets) {
-          const size = sizeOf(t.id);
+          const size = sizeOf(t.id, shot);
           const fr = el('div', 'frame', '<div class="frame-stage"></div><div class="text-hits"></div>');
           fr.dataset.target = t.id;
           if (t.device.id === 'duo') fr.dataset.display = t.display.id;
@@ -343,7 +362,6 @@ function buildStructure() {
       if (lang === state.baseLang && group.shots.length < MAX_SHOTS) {   // another screen of this device
         const add = el('button', 'add-card', `${PLUS}<span>Add ${device.short || device.name} screen</span>`);
         add.type = 'button';
-        add.style.height = `${Math.round(Math.max(...targets.map(t => sizeOf(t.id).height)) * K)}px`;
         add.onclick = () => { group.shots.push(newShot(group)); refresh({ fit: true }); };
         cards.appendChild(add);
       }
@@ -367,8 +385,7 @@ function groupHead(group, device) {
   const head = el('header', 'group-head');
   const title = el('div', 'group-title', '<h2></h2><span class="group-count"></span>');
   title.querySelector('h2').textContent = device.name;
-  const sizes = targetsOfDevice(device.id).map(t => `${sizeOf(t.id).width} × ${sizeOf(t.id).height}`).join(' · ');
-  title.querySelector('.group-count').textContent = `${group.shots.length} of ${MAX_SHOTS} · ${sizes}`;
+  title.querySelector('.group-count').textContent = `${group.shots.length} of ${MAX_SHOTS} screenshots`;
   const tools = el('div', 'group-tools');
   const sw = el('span', 'swatches');
   sw.dataset.device = device.id;
@@ -381,25 +398,6 @@ function groupHead(group, device) {
     sw.appendChild(b);
   }
   tools.appendChild(sw);
-  for (const x of device.displays) {
-    if (x.poses?.length === 1) continue;   // iPhones are always portrait
-    const tid = `${device.id}/${x.id}`;
-    const seg = el('div', 'segmented');
-    seg.dataset.pose = tid;
-    seg.setAttribute('role', 'group');
-    seg.setAttribute('aria-label', `${x.label} display orientation`);
-    for (const v of ['portrait', 'landscape']) {
-      const b = el('button', '', POSE_ICON[v]);
-      b.type = 'button'; b.dataset.v = v; b.setAttribute('aria-label', v);
-      b.title = `${x.label} display: ${v}, ${x.size[v].width} × ${x.size[v].height}`;
-      b.setAttribute('aria-pressed', String(state.pose[tid] === v));
-      b.onclick = () => { state.pose[tid] = v; saveDevicePrefs(); renderBoard({ fit: true }); };
-      seg.appendChild(b);
-    }
-    const l = el('span', 'pose-label');
-    l.textContent = x.label;
-    tools.append(l, seg);
-  }
   const change = el('button', 'group-btn', 'Change device');
   change.type = 'button';
   change.onclick = () => openDeviceDialog({ replace: group.id });
@@ -436,7 +434,7 @@ function drawAll() {
     const shot = state.shots.find(s => s.id === f.shotId);
     if (!shot) continue;
     const mine = editing && editing.shotId === f.shotId && editing.lang === f.lang && editing.target === f.target;
-    f.nodes = buildComposition(f.layer, sizeOf(f.target), { ...compositionProps(shot, f.target, f.lang), hide: mine ? editing.key : null });
+    f.nodes = buildComposition(f.layer, sizeOf(f.target, shot), { ...compositionProps(shot, f.target, f.lang), hide: mine ? editing.key : null });
     placeTextHits(f);
   }
   if (editing) positionEditor();
@@ -450,10 +448,9 @@ function renderBoard({ fit = false } = {}) {
   $('exportBtn').disabled = !state.shots.some(hasAnyImage);
   $('langLabel').textContent = state.langs.length > 1 ? `${state.langs.length} languages` : 'Translate';
   const targets = activeTargets();
-  $('sizeInfo').textContent = targets.length > 2 ? `${targets.length} App Store sizes`
-    : targets.map(t => `${t.display.label || t.device.name} ${sizeOf(t.id).width} × ${sizeOf(t.id).height}`).join(' · ');
+  $('sizeInfo').textContent = `${targets.length} App Store size${targets.length > 1 ? 's' : ''}`;
   if (!has) return;
-  const key = JSON.stringify([state.groups.map(g => [g.device, g.shots.map(s => s.id)]), state.langs, state.pose, state.colors, state.licensed]);
+  const key = JSON.stringify([state.groups.map(g => [g.device, g.shots.map(s => [s.id, s.pose])]), state.langs, state.colors, state.licensed]);
   if (key !== structureKey) { buildStructure(); structureKey = key; requestAnimationFrame(schedulePixelRatio); }
   syncSelectionUI();
   drawAll();
@@ -479,7 +476,7 @@ function duplicateShot(id) {
   if (g.shots.length >= MAX_SHOTS) return toast(`${deviceById(g.device).name} has its ${MAX_SHOTS} screenshots, the App Store maximum.`);
   const i = g.shots.findIndex(s => s.id === id);
   const s = g.shots[i];
-  const copy = { ...s, id: nextId++, text: structuredClone(s.text), style: { ...(s.style || {}) } };
+  const copy = { ...s, id: nextId++, text: structuredClone(s.text), style: { ...(s.style || {}) }, pose: { ...(s.pose || {}) } };
   g.shots.splice(i + 1, 0, copy);
   state.selection = new Set([copy.id]);
   refresh();
@@ -628,7 +625,7 @@ function setupBoard() {
   const pointers = new Map();
   let drag = null, pinch = null;
   board.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.text-hit, .screen-add, .add-card, .add-group, .group-head, .card-tools, .row-remove, .inline-editor')) return;
+    if (e.target.closest('.text-hit, .screen-add, .add-card, .add-group, .group-head, .card-tools, .card-pose, .row-remove, .inline-editor')) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     board.setPointerCapture(e.pointerId);
     if (pointers.size === 2) {
@@ -707,7 +704,8 @@ const DEFAULT_COPY = [
 function newShot(group) {
   const [headline, subheadline] = DEFAULT_COPY[(group?.shots.length || 0) % DEFAULT_COPY.length];
   const screens = [...new Set(targetsOfDevice(group?.device).map(t => t.display.screen))];
-  return { id: nextId++, images: {}, text: { [state.baseLang]: sameText(screens, { headline, subheadline }) } };
+  const pose = { ...(group?.shots.at(-1)?.pose || {}) };   // a new card starts like the one before it
+  return { id: nextId++, images: {}, pose, text: { [state.baseLang]: sameText(screens, { headline, subheadline }) } };
 }
 
 // The group and screen whose shape is closest to the capture's: a tall capture goes to an iPhone, a
@@ -715,10 +713,10 @@ function newShot(group) {
 function bestScreen(img) {
   const a = img.width / img.height;
   let best = null, bestD = Infinity;
-  for (const g of state.groups) for (const t of targetsOfDevice(g.device)) {
-    const { width, height } = sizeOf(t.id);
+  for (const g of state.groups) for (const t of targetsOfDevice(g.device)) for (const pose of t.display.poses || ['portrait', 'landscape']) {
+    const { width, height } = t.display.size[pose];
     const d = Math.abs(Math.log(a / (width / height)));
-    if (d < bestD) { bestD = d; best = { group: g, target: t }; }
+    if (d < bestD) { bestD = d; best = { group: g, target: t, pose }; }
   }
   return best;
 }
@@ -731,12 +729,13 @@ async function addFiles(files) {
   for (const f of images) {
     try {
       const img = await loadImage(f);
-      const { group, target } = bestScreen(img);
+      const { group, target, pose } = bestScreen(img);
       const screen = target.display.screen;
-      let shot = group.shots.find(s => !imageFor(s, screen, state.pose[target.id]));
+      let shot = group.shots.find(s => !imageFor(s, screen, poseOf(s, target.id)));
       if (!shot && group.shots.length >= MAX_SHOTS) { full++; continue; }
       if (!shot) { shot = newShot(group); group.shots.push(shot); }
       shot.images = { ...shot.images, [screen]: img };
+      shot.pose = { ...shot.pose, [target.id]: pose };   // the capture's own orientation
     } catch (e) { toast(e.message); }
   }
   refresh({ fit: true });
@@ -773,7 +772,7 @@ async function loadSampleShots() {
       for (const [pose, src] of Object.entries(poses)) variants[screen][pose] = await loadUrl(src);
     }
     if (!Object.values(variants).some(v => Object.values(v).some(Boolean))) return [];
-    shots.push({ id: nextId++, images: {}, variants,
+    shots.push({ id: nextId++, images: {}, variants, pose: { 'duo/inner': 'landscape' },   // captured unfolded, in landscape
       text: { [state.baseLang]: sameText(['duo/inner', 'duo/outer'], { headline: s.headline, subheadline: s.subheadline }) } });
   }
   return shots;
@@ -798,7 +797,6 @@ function setupDropzone() {
       if (!g) { g = newGroup('duo'); g.shots = []; state.groups.push(g); }
       await loadFrame('duo', state.colors.duo);
       // The captures were taken unfolded in landscape, so show the inner display that way.
-      state.pose['duo/inner'] = 'landscape';
       g.shots = [...g.shots.filter(x => hasAnyImage(x) || x.edited), ...shots].slice(0, MAX_SHOTS);   // samples replace untouched empty cards
       saveDevicePrefs();
       return refresh({ fit: true });
@@ -947,7 +945,7 @@ function limitDevicesToPlan() {
 }
 
 function saveDevicePrefs() {
-  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ groups: state.devices, models: state.models, colors: state.colors, pose: state.pose })); } catch {}
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ groups: state.devices, models: state.models, colors: state.colors })); } catch {}
 }
 
 function loadDevicePrefs() {
@@ -963,7 +961,6 @@ function setupDevice(available) {
   if (prefs) {   // only keep what still exists
     for (const [fam, id] of Object.entries(prefs.models || {})) if (available[id]) state.models[fam] = id;
     for (const [id, c] of Object.entries(prefs.colors || {})) if (available[id]?.some(x => x.id === c)) state.colors[id] = c;
-    for (const [tid, p] of Object.entries(prefs.pose || {})) if (targetById(tid) && (p === 'portrait' || p === 'landscape')) state.pose[tid] = p;
   }
   let devices = [...new Set((prefs?.groups || prefs?.devices || []).filter(id => available[id]))];
   if (!devices.length) devices = [Object.keys(available)[0] || 'duo'];
@@ -1127,14 +1124,12 @@ function setupLicense() {
 }
 
 // ---------- Export ----------
-// "iPhone-Duo-inner-2853x2007", "iPhone-Air-1260x2736": one folder per App Store size.
-const folderName = (t) => {
-  const { width, height } = sizeOf(t.id);
-  return `${t.device.name.replace(/\s+/g, '-')}${t.display.label ? '-' + t.display.id : ''}-${width}x${height}`;
-};
+// "iPhone-Duo-inner", "iPhone-Air": one folder per App Store display size; App Store Connect takes
+// portrait and landscape screenshots in the same slot.
+const folderName = (t) => `${t.device.name.replace(/\s+/g, '-')}${t.display.label ? '-' + t.display.id : ''}`;
 
 async function renderToPng(shot, tid, lang) {
-  const size = sizeOf(tid);
+  const size = sizeOf(tid, shot);
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;left:-99999px;top:0;';
   document.body.appendChild(host);
@@ -1160,8 +1155,8 @@ async function exportZip() {
   const targets = activeTargets();
   let skipped = 0;
   const count = {};   // numbered per folder, so skipped empty frames leave no gaps
-  for (const lang of state.langs) state.shots.forEach(s => targets.forEach(t => {
-    if (imageFor(s, t.display.screen, state.pose[t.id])) jobs.push({ lang, s, i: (count[lang + t.id] = (count[lang + t.id] || 0) + 1) - 1, t });
+  for (const lang of state.langs) state.shots.forEach(s => targetsOf(s).forEach(t => {
+    if (imageFor(s, t.display.screen, poseOf(s, t.id))) jobs.push({ lang, s, i: (count[lang + t.id] = (count[lang + t.id] || 0) + 1) - 1, t });
     else if (lang === state.baseLang) skipped++;
   }));
   if (!jobs.length) { btn.disabled = false; return toast('Add a screenshot to a frame first.'); }
@@ -1169,7 +1164,6 @@ async function exportZip() {
   try {
     let done = 0;
     for (const { lang, s, i, t } of jobs) {
-      const { width, height } = sizeOf(t.id);
       const blob = await renderToPng(s, t.id, lang);
       const folder = state.langs.length > 1 ? `${lang}/` : '';
       zip.file(`${folder}${folderName(t)}/${String(i + 1).padStart(2, '0')}.png`, blob);
@@ -1177,7 +1171,7 @@ async function exportZip() {
       await new Promise(r => setTimeout(r)); // keep UI responsive
     }
     zip.file('README.txt', `App Store screenshots — made with HearHere Studio\n\n` +
-      targets.map(t => `${targetLabel(t)} (${t.device.note}): ${folderName(t)}`).join('\n') +
+      targets.map(t => `${targetLabel(t)}: ${folderName(t)} (${t.display.size.portrait.width} × ${t.display.size.portrait.height}${t.display.poses ? '' : ' or landscape'})`).join('\n') +
       `\n\nUpload each folder to the matching device size in App Store Connect (1–10 per size).\nPNG, RGB, no alpha channel.\n`);
     const out = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
     const a = document.createElement('a');

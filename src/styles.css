@@ -603,3 +603,18 @@ details[open] summary { margin-bottom: 12px; }
 .group-tools .swatches button { width: 20px; height: 20px; }
 .group-tools .segmented button { width: 28px; height: 24px; }
 .group-tools .pose-label { font-size: 12px; }
+
+/* A group is a soft panel, so its cards and its "add screen" card read as one set */
+.group { padding: calc(18px * var(--ui, 1)) calc(22px * var(--ui, 1)) calc(22px * var(--ui, 1)); border-radius: calc(22px * var(--ui, 1)); background: color-mix(in srgb, var(--card) 55%, transparent); box-shadow: 0 0 0 calc(.5px * var(--ui, 1)) var(--hairline); }
+.group .row-shots { align-items: stretch; }
+.group .add-card {
+  align-self: stretch; height: auto !important; width: calc(132px * var(--ui, 1)); margin: calc(30px * var(--ui, 1)) 0 calc(22px * var(--ui, 1));
+  border-radius: calc(14px * var(--ui, 1)); border-width: calc(1.5px * var(--ui, 1));
+}
+/* The selected card shows its orientation choice (per display on the Duo) */
+.card-pose { display: none; align-items: center; gap: 6px; margin-left: 10px; }
+.shot-card.selected .card-pose { display: inline-flex; }
+.card-pose .segmented button { width: 26px; height: 22px; }
+.card-pose .segmented svg { width: 15px; height: 15px; }
+.card-pose .pose-label { font-size: 11.5px; color: var(--muted); }
+.card-pose .pose-label:not(:first-child) { margin-left: 6px; }
