@@ -130,11 +130,19 @@ export function buildComposition(layer, size, p) {
       width, align, text: p.subheadline || '', fontFamily: font.subFamily || font.family, fontStyle: font.subStyle,
       fontSize: ss, lineHeight: 1.38, fill: hexToRgba(st.textColor, 0.78), letterSpacing: ss * -0.005,
     });
+    // Long words (German, Finnish) must never break mid-word: shrink until the longest one fits.
+    const longestWord = () => Math.max(0, ...(p.headline || '').split(/\s+/).map(word => headline.measureSize(word).width));
+    const longest = longestWord();
+    if (longest > width) {
+      const fit = Math.floor(hs * (width / longest) * 0.98);
+      headline.fontSize(fit);
+      headline.letterSpacing(fit * font.tracking);
+    }
     // Balance the headline like CSS text-wrap: balance, so it never ends on a lone word:
     // the narrowest width that keeps the same number of lines, aligned within the column.
     const lines = headline.textArr.length;
     if (lines > 1) {
-      let lo = width * 0.4, hi = width;
+      let lo = Math.max(width * 0.4, longestWord() + 2), hi = width;
       for (let i = 0; i < 10; i++) {
         const mid = (lo + hi) / 2;
         headline.width(mid);
@@ -149,7 +157,7 @@ export function buildComposition(layer, size, p) {
   const img = p.image;
   const frame = p.frame;
   const aspect = frame ? frame.geo.w / frame.geo.h : img ? img.width / img.height : 0.7;
-  const L = place(st.layout || 'peek-left', w, h, aspect, (tw, align, scale) => makeText(tw, align, scale).height);
+  const L = place(st.layout || 'top', w, h, aspect, (tw, align, scale) => makeText(tw, align, scale).height);
   const text = makeText(L.tw, L.align, L.scale);
   text.headline.position({ x: L.tx, y: L.ty });
   text.sub.position({ x: L.tx, y: L.ty + text.headline.height() + text.gapHS });

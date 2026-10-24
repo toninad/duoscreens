@@ -94,7 +94,8 @@ try {
 
   // Edit headline of screenshot 1
   // Edit text inline: click the headline on the inner preview, type, then Tab to the subheadline.
-  await page.click('.text-hits[data-display="inner"] [data-key="headline"]');
+  check(await page.evaluate(() => window.__dss.state.style.layout === 'top') && await page.getAttribute('[data-layout="top"]', 'aria-pressed') === 'true', 'Text-above layout is the preselected default');
+  await page.click('.lang-row[data-lang="en"] .shot-card:first-child .frame[data-display="inner"] [data-key="headline"]');
   await page.fill('#inlineEditor', 'Your podcasts, unfolded');
   await page.keyboard.press('Tab');
   await page.fill('#inlineEditor', 'Browse and listen side by side on iPhone Duo.');
@@ -102,6 +103,8 @@ try {
   check(await page.isHidden('#inlineEditor'), 'Inline editor closes on Enter');
   const h = await page.evaluate(() => window.__dss.state.shots[0].text.en.headline);
   check(h === 'Your podcasts, unfolded', 'Headline edit stored');
+  await page.keyboard.press('Escape');
+  check(await page.evaluate(() => window.__dss.state.selection.size === 0), 'Escape clears the selection');
 
   // Try every template renders without errors
   for (const id of ['paper', 'ink', 'night', 'sage', 'mist', 'clay']) {
@@ -153,8 +156,8 @@ try {
   await page.waitForFunction(() => ['de', 'ja'].every(l => window.__dss.state.langs.includes(l)));
   const deText = await page.evaluate(() => window.__dss.state.shots[1].text.de.headline);
   check(deText === 'Mach da weiter, wo du aufgehört hast', `Translation applied: "${deText}"`);
-  await page.selectOption('#langSelect', 'en');
   await page.keyboard.press('Escape');
+  check(await page.$$eval('.lang-row', rs => rs.map(r => r.dataset.lang).join()) === 'en,de,ja', 'Board shows a row per language');
 
   // Pro export: 3 languages × 2 shots × 2 displays = 12, no watermark
   const pro = await exportZip(page, 'pro');
@@ -181,6 +184,19 @@ try {
   const land = await exportZip(page, 'landscape');
   const landPngs = await verifyZip(land.zip, 'landscape', 12);
   check(landPngs.every(n => n.includes('2853x2007') || n.includes('2034x1398')), 'Landscape export uses 2853×2007 and 2034×1398');
+
+  // Variations: duplicate the second screenshot, restyle only the copy.
+  await page.click('.lang-row[data-lang="en"] .shot-card:nth-child(2) .card-num');
+  await page.click('.lang-row[data-lang="en"] .shot-card:nth-child(2) [data-a="dup"]');
+  await page.waitForFunction(() => window.__dss.state.shots.length === 3);
+  check((await page.textContent('#scopeLabel')).includes('3'), 'The copy is selected and the dock scopes to it');
+  await page.click('[data-template="ink"]');
+  const styles = await page.evaluate(() => window.__dss.state.shots.map(s => s.style?.bg1 || 'base'));
+  check(styles[0] === 'base' && styles[1] === 'base' && styles[2] !== 'base', 'Theme applies to the selected variation only');
+  check(await page.$$eval('.lang-row[data-lang="de"] .shot-card', cs => cs.length) === 3, 'Variation appears in every language row');
+  await page.click('#zoomFit');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(out, 'board.png') });
 
   // Back from Polar checkout: the app claims the key itself (first answer: still being created).
   let claims = 0;

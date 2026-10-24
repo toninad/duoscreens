@@ -15,11 +15,10 @@ const DISPLAYS = ['inner', 'outer'];
 const sizeOf = (d) => DUO_SIZES[d][state.pose[d]];
 
 const state = {
-  shots: [],            // { id, name, image, outerImage, text: { [lang]: { headline, subheadline } } }
-  selected: -1,
+  shots: [],            // { id, name, image, outerImage, variants?, style?: overrides, text: { [lang]: { headline, subheadline } } }
+  selection: new Set(), // shot ids; empty means "all screenshots" for toolbar edits
   baseLang: 'en',
   langs: ['en'],
-  activeLang: 'en',
   style: null,
   licensed: false,
   pose: { inner: 'portrait', outer: 'portrait' },   // App Store Connect takes either orientation per display
@@ -27,13 +26,44 @@ const state = {
 };
 let nextId = 1;
 
-function setTemplate(id) {
-  const t = templateById(id);
-  state.style = { template: t, layout: state.style?.layout || 'peek-left', bg1: t.bg1, bg2: t.bg2, textColor: t.textColor, font: t.font, headlineScale: state.style?.headlineScale || 1 };
-  syncStyleInputs();
+// ---------- Style: shared defaults plus per-screenshot overrides (variations) ----------
+const styleOf = (shot) => ({ ...state.style, ...(shot?.style || {}) });
+const selectedShots = () => state.shots.filter(s => state.selection.has(s.id));
+
+/** The style the toolbar shows: the selected screenshot's, or the shared one. */
+function activeStyle() {
+  const sel = selectedShots();
+  return sel.length ? styleOf(sel[0]) : state.style;
+}
+
+/** Toolbar edits apply to the selected screenshots, or to all of them when nothing is selected. */
+function applyStyle(patch) {
+  const sel = selectedShots();
+  if (sel.length) for (const s of sel) s.style = { ...(s.style || {}), ...patch };
+  else {
+    Object.assign(state.style, patch);
+    for (const s of state.shots) if (s.style) for (const k of Object.keys(patch)) delete s.style[k];
+  }
+  syncToolbar();
+  renderBoard();
+}
+
+const themePatch = (t) => ({ template: t, bg1: t.bg1, bg2: t.bg2, textColor: t.textColor, font: t.font });
+
+function setTemplate(id) { applyStyle(themePatch(templateById(id))); }
+
+function syncToolbar() {
   renderTemplateGrid();
   renderLayoutGrid();
-  renderPreview();
+  syncStyleInputs();
+  const sel = selectedShots();
+  $('scopeLabel').textContent = !sel.length ? 'All screenshots'
+    : sel.length === 1 ? `Screenshot ${state.shots.indexOf(sel[0]) + 1}` : `${sel.length} selected`;
+  $('scopeLabel').classList.toggle('on', sel.length > 0);
+  const one = sel.length === 1 ? sel[0] : null;
+  $('outerFile').disabled = !one;
+  $('outerValue').textContent = !one ? 'Select one screenshot' : one.outerImage ? 'Custom image' : one.variants ? 'Cover capture' : 'Same image';
+  $('outerValue').parentElement.setAttribute('aria-disabled', String(!one));
 }
 
 // ---------- UI: templates ----------
@@ -45,7 +75,7 @@ function renderTemplateGrid() {
     b.type = 'button';
     b.title = t.name;
     b.dataset.template = t.id;
-    b.setAttribute('aria-pressed', String(state.style?.template.id === t.id));
+    b.setAttribute('aria-pressed', String(activeStyle().template.id === t.id));
     b.style.background = `linear-gradient(${t.bg1}, ${t.bg2})`;
     b.style.color = t.textColor;
     const fam = FONTS[t.font].family;
@@ -73,239 +103,311 @@ function renderLayoutGrid() {
     const b = document.createElement('button');
     b.type = 'button'; b.title = l.name; b.dataset.layout = l.id;
     b.setAttribute('aria-label', l.name);
-    b.setAttribute('aria-pressed', String(state.style.layout === l.id));
+    b.setAttribute('aria-pressed', String(activeStyle().layout === l.id));
     b.innerHTML = `<svg viewBox="0 0 40 32" aria-hidden="true">${LAYOUT_ICONS[l.id]}</svg>`;
-    b.onclick = () => { state.style.layout = l.id; renderLayoutGrid(); renderPreview(); };
+    b.onclick = () => applyStyle({ layout: l.id });
     grid.appendChild(b);
   }
 }
 
 function syncStyleInputs() {
-  $('bg1').value = state.style.bg1;
-  $('bg2').value = state.style.bg2;
-  $('textColor').value = state.style.textColor;
-  $('fontSelect').value = state.style.font;
-  $('headlineScale').value = state.style.headlineScale;
+  const st = activeStyle();
+  $('bg1').value = st.bg1;
+  $('bg2').value = st.bg2;
+  $('textColor').value = st.textColor;
+  $('fontSelect').value = st.font;
+  $('headlineScale').value = st.headlineScale;
 }
 
-// ---------- UI: shot list ----------
-function textFor(shot, lang = state.activeLang) {
+// ---------- Text ----------
+function textFor(shot, lang) {
   return shot.text[lang] || shot.text[state.baseLang] || { headline: '', subheadline: '' };
 }
 
-function renderShotList() {
-  const list = $('shotList');
-  list.innerHTML = '';
-  state.shots.forEach((s, i) => {
-    const li = document.createElement('li');
-    li.className = i === state.selected ? 'active' : '';
-    li.title = `${i + 1}. ${textFor(s).headline || s.name}`;
-    li.tabIndex = 0;
-    li.draggable = true;
-    li.innerHTML = `<img alt=""><button class="del" data-a="del" title="Remove" aria-label="Remove screenshot ${i + 1}">${ICONS.del}</button>`;
-    li.querySelector('img').src = s.thumb || s.image.src;
-    li.onclick = (e) => {
-      if (e.target.closest('button')?.dataset.a === 'del') { state.shots.splice(i, 1); state.selected = Math.min(state.selected, state.shots.length - 1); }
-      else state.selected = i;
-      refresh();
-    };
-    // Reorder by dragging, or with Alt + arrow keys.
-    li.onkeydown = (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); state.selected = i; refresh(); }
-      if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); moveShot(i, i + (e.key === 'ArrowLeft' ? -1 : 1)); }
-    };
-    li.ondragstart = (e) => { e.dataTransfer.setData('text/x-shot', String(i)); e.dataTransfer.effectAllowed = 'move'; li.classList.add('dragging'); };
-    li.ondragend = () => li.classList.remove('dragging');
-    li.ondragover = (e) => { if (e.dataTransfer.types.includes('text/x-shot')) { e.preventDefault(); e.stopPropagation(); } };
-    li.ondrop = (e) => {
-      const from = e.dataTransfer.getData('text/x-shot');
-      if (from === '') return;
-      e.preventDefault(); e.stopPropagation();
-      moveShot(+from, i);
-    };
-    list.appendChild(li);
-  });
-  requestAnimationFrame(placeIndicator);
-}
-
-function moveShot(from, to) {
-  if (to < 0 || to >= state.shots.length || from === to) return;
-  const [shot] = state.shots.splice(from, 1);
-  state.shots.splice(to, 0, shot);
-  state.selected = to;
-  refresh();
-  $('shotList').children[to]?.focus();
-}
-
-// Strip thumbnails are the real composition of the inner display, re-rendered shortly after edits.
-let thumbStage, thumbTimer;
-function scheduleThumbs() {
-  clearTimeout(thumbTimer);
-  thumbTimer = setTimeout(renderThumbs, 150);
-}
-function renderThumbs() {
-  const size = sizeOf('inner');
-  const h = 104, k = h / size.height, w = Math.round(size.width * k);   // 52px tall at 2x
-  if (!thumbStage) {
-    const host = document.createElement('div');
-    host.style.cssText = 'position:fixed;left:-99999px;top:0;';
-    document.body.appendChild(host);
-    thumbStage = new Konva.Stage({ container: host, width: w, height: h });
-    thumbStage.add(new Konva.Layer({ listening: false }));
-  }
-  const layer = thumbStage.getLayers()[0];
-  thumbStage.size({ width: w, height: h });
-  layer.scale({ x: k, y: k });
-  const imgs = $('shotList').querySelectorAll('img');
-  state.shots.forEach((shot, i) => {
-    buildComposition(layer, size, { ...compositionProps(shot, 'inner'), watermark: false });
-    shot.thumb = thumbStage.toDataURL({ pixelRatio: 1 });
-    if (imgs[i]) imgs[i].src = shot.thumb;
-  });
-  requestAnimationFrame(placeIndicator);
-}
-
-// One orange indicator that glides to the selected screenshot instead of a highlight per row.
-function placeIndicator() {
-  const list = $('shotList'), ind = $('shotIndicator');
-  const li = list.children[state.selected];
-  ind.classList.toggle('on', !!li);
-  if (!li) return;
-  ind.style.setProperty('--x', `${li.offsetLeft - list.scrollLeft + li.offsetWidth * 0.3}px`);
-  ind.style.setProperty('--w', `${li.offsetWidth * 0.4}px`);
-}
-
-function syncTextInputs() {
-  const s = state.shots[state.selected];
-  $('textFor').textContent = s ? `· ${state.selected + 1}` : '';
-  $('outerFile').disabled = !s;
-  $('outerValue').textContent = s?.outerImage ? 'Custom image' : s?.variants ? 'Cover capture' : 'Same image';
-  $('outerValue').parentElement.setAttribute('aria-disabled', String(!s));
-}
-
-function renderLangSelect() {
-  const sel = $('langSelect');
-  sel.innerHTML = '';
-  for (const code of state.langs) {
-    const o = document.createElement('option');
-    o.value = code; o.textContent = (LANGUAGES.find(l => l[0] === code)?.[1] || code) + (code === state.baseLang ? ' (base)' : '');
-    sel.appendChild(o);
-  }
-  sel.value = state.activeLang;
-  $('langLabel').textContent = langName(state.activeLang);
-}
-
-// ---------- Preview ----------
-const previewStages = {};
-function ensurePreviewStages() {
-  for (const d of DISPLAYS) {
-    if (previewStages[d]) continue;
-    const stage = new Konva.Stage({ container: d === 'inner' ? 'stageInner' : 'stageOuter', width: 10, height: 10 });
-    const layer = new Konva.Layer({ listening: false });
-    stage.add(layer);
-    previewStages[d] = { stage, layer };
-  }
-}
-
-function previewScale() {
-  const wrap = document.querySelector('.stage-wrap');
-  const cs = getComputedStyle(wrap);
-  const gap = parseFloat(getComputedStyle($('previews')).columnGap) || 0;
-  const availW = Math.max(200, wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - (matchMedia('(max-width: 860px)').matches ? 0 : gap));
-  // on narrow screens the stage grows with its content, so cap by the viewport instead
-  const narrow = matchMedia('(max-width: 860px)').matches;
-  const availH = Math.max(200, narrow ? window.innerHeight * 0.62 : wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 40);
-  const inner = sizeOf('inner'), outer = sizeOf('outer');
-  // both previews share the same pixel scale so their relative size is honest; narrow screens stack them
-  if (narrow) return Math.min(availW / Math.max(inner.width, outer.width), availH / Math.max(inner.height, outer.height));
-  return Math.min(availH / Math.max(inner.height, outer.height), availW / (inner.width + outer.width));
-}
-
-function compositionProps(shot, display, lang = state.activeLang) {
+function compositionProps(shot, display, lang) {
   const t = textFor(shot, lang);
   return {
     image: shot.variants?.[display]?.[state.pose[display]]
       || (display === 'outer' && shot.outerImage) || shot.image,
     frame: getFrame(state.deviceColor, display, state.pose[display]),
     headline: t.headline, subheadline: t.subheadline,
-    style: state.style, watermark: !state.licensed, watermarkText: WATERMARK_TEXT,
+    style: styleOf(shot), watermark: !state.licensed, watermarkText: WATERMARK_TEXT,
   };
 }
 
-function renderPreview() {
-  const shot = state.shots[state.selected];
-  $('empty').hidden = !!shot;
-  $('previews').hidden = !shot;
-  $('dock').hidden = !shot;
-  $('filmstrip').hidden = !shot;
-  if (!shot) return;
-  ensurePreviewStages();
-  const s = previewScale();
-  for (const d of DISPLAYS) {
-    const p = previewStages[d];
-    const size = sizeOf(d);
-    $(d + 'Size').textContent = `${size.width} × ${size.height}`;
-    p.stage.size({ width: Math.round(size.width * s), height: Math.round(size.height * s) });
-    p.stage.scale({ x: s, y: s });
-    const nodes = buildComposition(p.layer, size, { ...compositionProps(shot, d), hide: editing?.display === d ? editing.key : null });
-    placeTextHits(d, nodes, s);
+// ---------- Board ----------
+// One canvas for everything: a row per language, a card per screenshot (its inner and outer display),
+// pan with scroll or drag, zoom with pinch or ⌘ + scroll. Frames are drawn at board scale K and
+// re-rasterized at the current zoom so text stays sharp.
+const K = 440 / 2853;                 // board units per export pixel: an inner portrait frame is 440 units tall
+const view = { x: 0, y: 0, z: 1 };
+const frames = new Map();             // `${shotId}:${lang}:${display}` -> { stage, layer, el, shotId, lang, display, nodes, hits }
+let structureKey = '';
+let editing = null;                   // { shotId, lang, display, key }
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const el = (tag, cls, html = '') => { const e = document.createElement(tag); if (cls) e.className = cls; e.innerHTML = html; return e; };
+const ICON = {
+  dup: svg('M5.5 5.5V4a1.5 1.5 0 0 1 1.5-1.5h5A1.5 1.5 0 0 1 13.5 4v5A1.5 1.5 0 0 1 12 10.5h-1.5M4 5.5h5A1.5 1.5 0 0 1 10.5 7v5A1.5 1.5 0 0 1 9 13.5H4A1.5 1.5 0 0 1 2.5 12V7A1.5 1.5 0 0 1 4 5.5z'),
+  left: svg('M10 4l-4 4 4 4'), right: svg('M6 4l4 4-4 4'), del: svg('M5 5l6 6M11 5l-6 6'),
+};
+
+function applyView() {
+  $('boardWorld').style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
+  $('zoomLabel').textContent = `${Math.round(view.z * 100)}%`;
+  schedulePixelRatio();
+}
+
+let prTimer;
+function schedulePixelRatio() {
+  clearTimeout(prTimer);
+  prTimer = setTimeout(() => {
+    const pr = Math.min(4, Math.max(1, view.z * (window.devicePixelRatio || 1)));
+    for (const f of frames.values()) {
+      if (f.pr === pr) continue;
+      f.layer.getCanvas().setPixelRatio(pr);
+      f.pr = pr;
+      f.layer.batchDraw();
+    }
+  }, 120);
+}
+
+function zoomAt(cx, cy, factor) {
+  const r = $('board').getBoundingClientRect();
+  const px = cx - r.left, py = cy - r.top;
+  const z = Math.min(4, Math.max(0.08, view.z * factor));
+  const k = z / view.z;
+  view.x = px - (px - view.x) * k;
+  view.y = py - (py - view.y) * k;
+  view.z = z;
+  applyView();
+}
+
+function zoomBy(factor) {
+  const r = $('board').getBoundingClientRect();
+  zoomAt(r.left + r.width / 2, r.top + r.height / 2, factor);
+}
+
+/** Fits every row and card on screen, leaving room for the floating bars. */
+function fitBoard() {
+  const world = $('boardWorld'), board = $('board');
+  const w = world.offsetWidth, h = world.offsetHeight;
+  if (!w || !h) return;
+  const narrow = matchMedia('(max-width: 860px)').matches;
+  const top = narrow ? 64 : 76, bottom = narrow ? 92 : 104, side = narrow ? 16 : 48;
+  const bw = board.clientWidth - side * 2, bh = board.clientHeight - top - bottom;
+  // Phones stack the cards in one column, so fit the width and let people pan down.
+  view.z = Math.min(1.25, Math.max(0.08, narrow ? bw / w : Math.min(bw / w, bh / h)));
+  view.x = side + (bw - w * view.z) / 2;
+  view.y = top + Math.max(0, (bh - h * view.z) / 2);
+  applyView();
+}
+
+function buildStructure() {
+  for (const f of frames.values()) f.stage.destroy();
+  frames.clear();
+  const world = $('boardWorld');
+  world.innerHTML = '';
+  for (const lang of state.langs) {
+    const row = el('section', 'lang-row');
+    row.dataset.lang = lang;
+    const head = el('header', 'row-head', '<span class="row-name"></span><span class="row-sub"></span>');
+    head.querySelector('.row-name').textContent = langName(lang);
+    head.querySelector('.row-sub').textContent = lang === state.baseLang ? 'Base language' : 'Translated';
+    if (lang !== state.baseLang) {
+      const rm = el('button', 'row-remove', ICON.del);
+      rm.type = 'button'; rm.title = `Remove ${langName(lang)}`; rm.setAttribute('aria-label', rm.title);
+      rm.onclick = () => removeLang(lang);
+      head.appendChild(rm);
+    }
+    const cards = el('div', 'row-shots');
+    state.shots.forEach((shot, i) => {
+      const card = el('article', 'shot-card');
+      card.dataset.id = shot.id;
+      card.innerHTML = `<header class="card-head"><span class="card-num">${pad2(i + 1)}</span><span class="card-tag"></span>
+        <span class="card-tools">
+          <button type="button" data-a="dup" title="Duplicate as a variation" aria-label="Duplicate">${ICON.dup}</button>
+          <button type="button" data-a="left" title="Move left" aria-label="Move left" ${i === 0 ? 'disabled' : ''}>${ICON.left}</button>
+          <button type="button" data-a="right" title="Move right" aria-label="Move right" ${i === state.shots.length - 1 ? 'disabled' : ''}>${ICON.right}</button>
+          <button type="button" data-a="del" title="Remove" aria-label="Remove">${ICON.del}</button>
+        </span></header><div class="card-frames"></div>`;
+      card.querySelector('.card-tools').onclick = (e) => {
+        const a = e.target.closest('button')?.dataset.a;
+        if (a === 'dup') duplicateShot(shot.id);
+        else if (a === 'left') moveShot(shot.id, -1);
+        else if (a === 'right') moveShot(shot.id, 1);
+        else if (a === 'del') deleteShot(shot.id);
+      };
+      const framesEl = card.querySelector('.card-frames');
+      for (const d of DISPLAYS) {
+        const size = sizeOf(d);
+        const fr = el('div', 'frame', '<div class="frame-stage"></div><div class="text-hits"></div>');
+        fr.dataset.display = d;
+        fr.style.width = `${Math.round(size.width * K)}px`;
+        fr.style.height = `${Math.round(size.height * K)}px`;
+        const wrap = el('figure', 'frame-wrap');
+        wrap.appendChild(fr);
+        if (lang === state.baseLang) {
+          const cap = el('figcaption', 'frame-cap');
+          cap.textContent = `${d === 'inner' ? 'Inner' : 'Outer'} · ${size.width} × ${size.height}`;
+          wrap.appendChild(cap);
+        }
+        framesEl.appendChild(wrap);
+        const stage = new Konva.Stage({ container: fr.firstChild, width: Math.round(size.width * K), height: Math.round(size.height * K) });
+        const layer = new Konva.Layer({ listening: false });
+        layer.scale({ x: K, y: K });
+        stage.add(layer);
+        frames.set(`${shot.id}:${lang}:${d}`, { stage, layer, el: fr, shotId: shot.id, lang, display: d, pr: 0 });
+      }
+      cards.appendChild(card);
+    });
+    row.append(head, cards);
+    world.appendChild(row);
+  }
+  schedulePixelRatio();
+}
+
+function syncSelectionUI() {
+  for (const card of document.querySelectorAll('.shot-card')) {
+    const shot = state.shots.find(s => s.id === +card.dataset.id);
+    card.classList.toggle('selected', state.selection.has(+card.dataset.id));
+    card.querySelector('.card-tag').textContent = shot?.style && Object.keys(shot.style).length ? 'Variation' : '';
+  }
+  $('board').classList.toggle('has-selection', state.selection.size > 0);
+  syncToolbar();
+}
+
+let drawPending = false;
+function scheduleDraw() {
+  if (drawPending) return;
+  drawPending = true;
+  requestAnimationFrame(() => { drawPending = false; drawAll(); });
+}
+
+function drawAll() {
+  for (const f of frames.values()) {
+    const shot = state.shots.find(s => s.id === f.shotId);
+    if (!shot) continue;
+    const mine = editing && editing.shotId === f.shotId && editing.lang === f.lang && editing.display === f.display;
+    f.nodes = buildComposition(f.layer, sizeOf(f.display), { ...compositionProps(shot, f.display, f.lang), hide: mine ? editing.key : null });
+    placeTextHits(f);
   }
   if (editing) positionEditor();
-  scheduleThumbs();
+}
+
+function renderBoard({ fit = false } = {}) {
+  const has = state.shots.length > 0;
+  $('empty').hidden = has;
+  for (const id of ['board', 'dock', 'boardTools', 'zoomTools']) $(id).hidden = !has;
+  $('exportBtn').disabled = !has;
+  $('langLabel').textContent = state.langs.length > 1 ? `${state.langs.length} languages` : 'Translate';
+  $('sizeInfo').textContent = `Inner ${sizeOf('inner').width} × ${sizeOf('inner').height} · Outer ${sizeOf('outer').width} × ${sizeOf('outer').height}`;
+  if (!has) return;
+  const key = JSON.stringify([state.shots.map(s => s.id), state.langs, state.pose]);
+  if (key !== structureKey) { buildStructure(); structureKey = key; }
+  syncSelectionUI();
+  drawAll();
+  if (fit) requestAnimationFrame(fitBoard);
+}
+
+function refresh(opts) { renderBoard(opts); }
+
+// ---------- Selection and screenshot actions ----------
+function selectShot(id, additive) {
+  if (additive) { if (state.selection.has(id)) state.selection.delete(id); else state.selection.add(id); }
+  else state.selection = new Set([id]);
+  syncSelectionUI();
+}
+function clearSelection() {
+  if (!state.selection.size) return;
+  state.selection.clear();
+  syncSelectionUI();
+}
+
+function duplicateShot(id) {
+  const i = state.shots.findIndex(s => s.id === id);
+  const s = state.shots[i];
+  const copy = { ...s, id: nextId++, text: structuredClone(s.text), style: { ...(s.style || {}) } };
+  state.shots.splice(i + 1, 0, copy);
+  state.selection = new Set([copy.id]);
+  refresh();
+  toast('Duplicated. Change its layout, theme or text to make a variation.');
+}
+function moveShot(id, dir) {
+  const i = state.shots.findIndex(s => s.id === id), j = i + dir;
+  if (j < 0 || j >= state.shots.length) return;
+  [state.shots[i], state.shots[j]] = [state.shots[j], state.shots[i]];
+  refresh();
+}
+function deleteShot(id) {
+  if (editing?.shotId === id) stopEditing();
+  state.shots = state.shots.filter(s => s.id !== id);
+  state.selection.delete(id);
+  refresh();
+}
+function removeLang(lang) {
+  if (lang === state.baseLang) return;
+  if (editing?.lang === lang) stopEditing();
+  state.langs = state.langs.filter(l => l !== lang);
+  for (const s of state.shots) delete s.text[lang];
+  renderLangChecks();
+  refresh({ fit: true });
 }
 
 // ---------- Inline text editing ----------
-// Each preview gets transparent hit areas over its headline and subheadline. Clicking one opens a
-// textarea styled like the rendered text, placed exactly over it; the canvas hides that text meanwhile.
-let editing = null;          // { display, key }
-const hitRects = {};         // display -> { headline: {x,y,width,height,node}, subheadline: ... }
-
-function placeTextHits(display, nodes, scale) {
-  const box = document.querySelector(`.text-hits[data-display="${display}"]`);
-  hitRects[display] = {};
+// Every frame has transparent hit areas over its headline and subheadline. Clicking one opens a
+// textarea inside that frame, styled like the rendered text, so it zooms and pans with the board.
+function placeTextHits(f) {
+  const box = f.el.querySelector('.text-hits');
   box.innerHTML = '';
+  f.hits = {};
   for (const key of ['headline', 'subheadline']) {
-    const node = nodes[key];
+    const node = f.nodes[key];
     const r = node.getClientRect();
     const empty = !node.text();
-    const rect = { x: r.x, y: r.y, width: Math.max(r.width, empty ? node.width() * scale : 0), height: Math.max(r.height, node.fontSize() * scale * 1.3), node, scale };
-    if (empty && key === 'subheadline') rect.y = nodes.headline.getClientRect().y + nodes.headline.getClientRect().height + 4;
-    hitRects[display][key] = rect;
-    const b = document.createElement('button');
+    const rect = { x: r.x, y: r.y, width: Math.max(r.width, empty ? node.width() * K : 0), height: Math.max(r.height, node.fontSize() * K * 1.3) };
+    if (empty && key === 'subheadline') { const h = f.nodes.headline.getClientRect(); rect.y = h.y + h.height + 2; }
+    f.hits[key] = rect;
+    const b = el('button', 'text-hit' + (empty ? ' empty' : ''));
     b.type = 'button';
-    b.className = 'text-hit' + (empty ? ' empty' : '');
     b.dataset.key = key;
-    b.setAttribute('aria-label', `Edit ${key}`);
+    b.setAttribute('aria-label', `Edit ${key} (${langName(f.lang)})`);
     if (empty) b.textContent = key === 'headline' ? 'Add headline' : 'Add subheadline';
-    Object.assign(b.style, { left: `${rect.x - 6}px`, top: `${rect.y - 4}px`, width: `${rect.width + 12}px`, height: `${rect.height + 8}px` });
-    b.onclick = () => startEditing(display, key);
+    Object.assign(b.style, { left: `${rect.x - 4}px`, top: `${rect.y - 3}px`, width: `${rect.width + 8}px`, height: `${rect.height + 6}px` });
+    b.onclick = (e) => { e.stopPropagation(); startEditing(f, key); };
     box.appendChild(b);
   }
 }
 
-function startEditing(display, key) {
-  editing = { display, key };
+function startEditing(f, key) {
+  editing = { shotId: f.shotId, lang: f.lang, display: f.display, key };
+  const shot = state.shots.find(s => s.id === f.shotId);
+  if (!state.selection.has(f.shotId) || state.selection.size > 1) { state.selection = new Set([f.shotId]); syncSelectionUI(); }
   const ed = $('inlineEditor');
-  ed.value = textFor(state.shots[state.selected])[key] || '';
+  f.el.appendChild(ed);
+  ed.value = textFor(shot, f.lang)[key] || '';
   ed.placeholder = key === 'headline' ? 'Your best feature' : 'One line that explains it';
   ed.hidden = false;
-  renderPreview();
+  drawAll();
   ed.focus();
   ed.setSelectionRange(ed.value.length, ed.value.length);
 }
 
+function editingFrame() {
+  return editing && frames.get(`${editing.shotId}:${editing.lang}:${editing.display}`);
+}
+
 function positionEditor() {
+  const f = editingFrame();
   const ed = $('inlineEditor');
-  const r = hitRects[editing.display]?.[editing.key];
-  if (!r) return;
-  const n = r.node, k = r.scale;
-  const host = document.querySelector(`.text-hits[data-display="${editing.display}"]`).getBoundingClientRect();
-  const width = n.width() * k;
-  const left = host.left + n.getAbsolutePosition().x - n.offsetX() * k;
+  if (!f) return;
+  if (ed.parentElement !== f.el) f.el.appendChild(ed);
+  const n = f.nodes[editing.key];
+  const left = n.getAbsolutePosition().x - n.offsetX() * K;
   Object.assign(ed.style, {
-    left: `${left + window.scrollX}px`, top: `${host.top + r.y + window.scrollY}px`, width: `${width}px`,
-    font: `${n.fontStyle()} ${n.fontSize() * k}px ${n.fontFamily().includes(',') ? n.fontFamily() : `"${n.fontFamily()}"`}`,
-    lineHeight: String(n.lineHeight()), letterSpacing: `${n.letterSpacing() * k}px`,
+    left: `${left}px`, top: `${f.hits[editing.key].y}px`, width: `${n.width() * K}px`,
+    font: `${n.fontStyle()} ${n.fontSize() * K}px ${n.fontFamily().includes(',') ? n.fontFamily() : `"${n.fontFamily()}"`}`,
+    lineHeight: String(n.lineHeight()), letterSpacing: `${n.letterSpacing() * K}px`,
     color: n.fill(), textAlign: n.align(),
   });
   ed.style.height = 'auto';
@@ -314,35 +416,98 @@ function positionEditor() {
 
 function stopEditing() {
   editing = null;
-  $('inlineEditor').hidden = true;
-  renderPreview();
+  const ed = $('inlineEditor');
+  ed.hidden = true;
+  document.body.appendChild(ed);
+  drawAll();
 }
 
 function setupInlineEditor() {
   const ed = $('inlineEditor');
   ed.oninput = () => {
-    const s = state.shots[state.selected];
-    if (!s || !editing) return;
-    s.text[state.activeLang] = { ...textFor(s), [editing.key]: ed.value.replace(/\n/g, ' ') };
-    renderPreview();
-    renderShotList();
+    const shot = editing && state.shots.find(s => s.id === editing.shotId);
+    if (!shot) return;
+    shot.text[editing.lang] = { ...textFor(shot, editing.lang), [editing.key]: ed.value.replace(/\n/g, ' ') };
+    scheduleDraw();
   };
   ed.onkeydown = (e) => {
+    e.stopPropagation();
     if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); stopEditing(); ed.blur(); }
     if (e.key === 'Tab' && editing) {   // Tab hops between headline and subheadline
       e.preventDefault();
-      const next = editing.key === 'headline' ? 'subheadline' : 'headline';
-      startEditing(editing.display, next);
+      startEditing(editingFrame(), editing.key === 'headline' ? 'subheadline' : 'headline');
     }
   };
   ed.onblur = () => { setTimeout(() => { if (editing && document.activeElement !== ed) stopEditing(); }); };
 }
 
-function refresh() {
-  renderShotList();
-  syncTextInputs();
-  renderPreview();
-  $('exportBtn').disabled = state.shots.length === 0;
+// ---------- Pan, zoom, select ----------
+function setupBoard() {
+  const board = $('board');
+  board.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.01));
+    else { view.x -= e.deltaX; view.y -= e.deltaY; applyView(); }
+  }, { passive: false });
+
+  const pointers = new Map();
+  let drag = null, pinch = null;
+  board.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.text-hit, .card-tools, .row-remove, .inline-editor')) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    board.setPointerCapture(e.pointerId);
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+      drag = null;
+    } else {
+      drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false, card: e.target.closest('.shot-card'), additive: e.shiftKey || e.metaKey };
+    }
+  });
+  board.addEventListener('pointermove', (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      view.x += mx - pinch.mx; view.y += my - pinch.my;
+      zoomAt(mx, my, d / pinch.d);
+      pinch = { d, mx, my };
+    } else if (drag) {
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 4) { drag.moved = true; board.classList.add('panning'); }
+      if (drag.moved) { view.x = drag.vx + dx; view.y = drag.vy + dy; applyView(); }
+    }
+  });
+  const end = (e) => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (drag && !drag.moved && e.type === 'pointerup') {
+      if (drag.card) selectShot(+drag.card.dataset.id, drag.additive);
+      else clearSelection();
+    }
+    if (!pointers.size) { drag = null; board.classList.remove('panning'); }
+  };
+  board.addEventListener('pointerup', end);
+  board.addEventListener('pointercancel', end);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.closest?.('input, textarea, select, [contenteditable]') || $('board').hidden) return;
+    const mod = e.metaKey || e.ctrlKey;
+    if (e.key === 'Escape') clearSelection();
+    else if ((mod && e.key === '0') || (e.shiftKey && e.key === '!')) { e.preventDefault(); fitBoard(); }
+    else if (mod && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomBy(1.25); }
+    else if (mod && e.key === '-') { e.preventDefault(); zoomBy(0.8); }
+    else if (mod && e.key === 'a') { e.preventDefault(); state.selection = new Set(state.shots.map(s => s.id)); syncSelectionUI(); }
+    else if (mod && e.key === 'd' && state.selection.size === 1) { e.preventDefault(); duplicateShot([...state.selection][0]); }
+    else if ((e.key === 'Backspace' || e.key === 'Delete') && state.selection.size) {
+      for (const id of [...state.selection]) deleteShot(id);
+    }
+  });
+  $('zoomIn').onclick = () => zoomBy(1.25);
+  $('zoomOut').onclick = () => zoomBy(0.8);
+  $('zoomFit').onclick = fitBoard;
+  applyView();
 }
 
 // ---------- Uploads ----------
@@ -374,8 +539,7 @@ async function addFiles(files) {
       state.shots.push({ id: nextId++, name: f.name, image: img, outerImage: null, text: { [state.baseLang]: { headline, subheadline } } });
     } catch (e) { toast(e.message); }
   }
-  if (state.selected < 0) state.selected = 0;
-  refresh();
+  refresh({ fit: true });
 }
 
 const loadUrl = (src) => new Promise((resolve) => {
@@ -415,9 +579,8 @@ function setupDropzone() {
       // The captures were taken unfolded in landscape, so show the inner display that way.
       if (shots.some(s => s.variants.inner.landscape)) state.pose.inner = 'landscape';
       state.shots.push(...shots);
-      if (state.selected < 0) state.selected = state.shots.length - shots.length;
       syncDeviceInputs();
-      return refresh();
+      return refresh({ fit: true });
     }
     const { width, height } = sizeOf('inner');   // match the current inner pose, so nothing is cropped
     const blob = await makeSampleScreenshot(width, height);
@@ -425,23 +588,21 @@ function setupDropzone() {
   };
   $('emptySample').onclick = addSample;
   $('emptyAdd').onclick = () => $('fileInput').click();
-  $('shotList').addEventListener('scroll', placeIndicator, { passive: true });
 }
 
 // ---------- Text & style inputs ----------
 function setupInputs() {
-  $('headlineScale').oninput = (e) => { state.style.headlineScale = +e.target.value; renderPreview(); };
-  for (const k of ['bg1', 'bg2', 'textColor']) $(k).oninput = (e) => { state.style[k] = e.target.value; renderPreview(); };
+  $('headlineScale').oninput = (e) => applyStyle({ headlineScale: +e.target.value });
+  for (const k of ['bg1', 'bg2', 'textColor']) $(k).oninput = (e) => applyStyle({ [k]: e.target.value });
   const fs = $('fontSelect');
   for (const [k, f] of Object.entries(FONTS)) fs.add(new Option(f.label, k));
-  fs.onchange = (e) => { state.style.font = e.target.value; renderPreview(); };
-  $('langSelect').onchange = (e) => { state.activeLang = e.target.value; renderLangSelect(); refresh(); };
+  fs.onchange = (e) => applyStyle({ font: e.target.value });
   $('outerFile').onchange = async (e) => {
-    const s = state.shots[state.selected];
+    const s = selectedShots()[0];
     if (s && e.target.files[0]) { s.outerImage = await loadImage(e.target.files[0]); refresh(); }
     e.target.value = '';
   };
-  window.addEventListener('resize', () => { renderPreview(); placeIndicator(); });
+  window.addEventListener('resize', () => renderBoard());
 }
 
 // ---------- Device: pose and color ----------
@@ -459,7 +620,7 @@ function setupDevice(colors) {
       if (!v) return;
       state.pose[seg.dataset.pose] = v;
       syncDeviceInputs();
-      renderPreview();
+      renderBoard({ fit: true });
     };
   }
   const sw = $('colorSwatches');
@@ -467,7 +628,7 @@ function setupDevice(colors) {
     const b = document.createElement('button');
     b.type = 'button'; b.dataset.color = c.id; b.title = c.name; b.setAttribute('aria-label', c.name);
     b.style.setProperty('--swatch', c.swatch);
-    b.onclick = () => { state.deviceColor = c.id; syncDeviceInputs(); renderPreview(); };
+    b.onclick = () => { state.deviceColor = c.id; syncDeviceInputs(); renderBoard(); };
     sw.appendChild(b);
   }
   syncDeviceInputs();
@@ -520,10 +681,8 @@ function setupTranslate() {
         if (!state.langs.includes(lang)) state.langs.push(lang);
       }
       const added = Object.keys(translations);
-      if (added.length) state.activeLang = added[0];
-      renderLangSelect();
       renderLangChecks();
-      refresh();
+      refresh({ fit: true });
       const left = usage ? ` ${usage.limit - usage.runs} of ${usage.limit} left this month.` : '';
       $('translateStatus').textContent = (added.length ? `Added ${added.map(langName).join(', ')}. Review the text: exports include every language.` : '')
         + (failed.length ? ` Couldn't translate ${failed.map(langName).join(', ')}; try again.` : '') + left;
@@ -567,7 +726,7 @@ function applyLicense(valid, message) {
   $('licenseBadge').classList.toggle('pro', valid);
   if (message) $('licenseStatus').textContent = message;
   syncTranslateButton();
-  renderPreview();
+  renderBoard();
 }
 
 function setupLicense() {
@@ -701,11 +860,12 @@ async function boot() {
   setupInputs();
   setupInlineEditor();
   setupDevice(colors);
-  setTemplate('paper');
+  state.style = { ...themePatch(templateById('paper')), layout: 'top', headlineScale: 1 };
+  setupBoard();
+  syncToolbar();
   setupDropzone();
   setupTranslate();
   setupLicense();
-  renderLangSelect();
   $('exportBtn').onclick = exportZip;
   refresh();
   window.__dss = { state, ready: true }; // used by the headless test

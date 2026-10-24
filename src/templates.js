@@ -18,11 +18,11 @@ export const TEMPLATES = [
 ];
 
 export const LAYOUTS = [
-  { id: 'peek-left',  name: 'Peek from left' },    // device cut by the left edge, text on the right
-  { id: 'peek-right', name: 'Peek from right' },   // mirror
-  { id: 'top',        name: 'Text on top' },       // whole device under the text
+  { id: 'top',        name: 'Text on top' },       // whole device under the text (default)
   { id: 'rise',       name: 'Rise from bottom' },  // device runs off the bottom edge
   { id: 'drop',       name: 'Drop from top' },     // device runs off the top edge, text below
+  { id: 'peek-left',  name: 'Peek from left' },    // device cut by the left edge, text on the right
+  { id: 'peek-right', name: 'Peek from right' },   // mirror
 ];
 
 export function templateById(id) {

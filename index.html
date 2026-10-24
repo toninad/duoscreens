@@ -31,15 +31,13 @@
 
   <main class="layout">
     <section class="stage-wrap">
-      <div id="filmstrip" class="filmstrip" hidden>
-        <label id="dropzone" class="add-shot" tabindex="0" title="Add screenshots (or drop them anywhere)">
+      <div id="boardTools" class="board-tools" hidden>
+        <label id="dropzone" class="board-add" tabindex="0" title="Add screenshots (or drop them anywhere)">
           <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>
+          <span>Add screenshots</span>
         </label>
-        <div class="shot-list-wrap">
-          <ol id="shotList" class="shot-list" aria-label="Screenshots"></ol>
-          <span id="shotIndicator" class="shot-indicator" aria-hidden="true"></span>
-        </div>
+        <span id="sizeInfo" class="board-info"></span>
       </div>
       <div id="empty" class="empty">
         <svg class="duo-sketch" viewBox="0 0 264 132" aria-hidden="true">
@@ -57,17 +55,18 @@
         </div>
         <p class="fine">Your images stay on this device.</p>
       </div>
-      <div id="previews" class="previews" hidden>
-        <figure>
-          <div class="stage-box"><div id="stageInner" class="stage"></div><div class="text-hits" data-display="inner"></div></div>
-          <figcaption><b>Inner display</b><span id="innerSize"></span></figcaption>
-        </figure>
-        <figure>
-          <div class="stage-box"><div id="stageOuter" class="stage"></div><div class="text-hits" data-display="outer"></div></div>
-          <figcaption><b>Outer display</b><span id="outerSize"></span></figcaption>
-        </figure>
+      <div id="board" class="board" hidden aria-label="Screenshots board">
+        <div id="boardWorld" class="board-world"></div>
+      </div>
+      <div id="zoomTools" class="zoom-tools" hidden>
+        <button id="zoomOut" type="button" title="Zoom out (⌘−)" aria-label="Zoom out"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10h10"/></svg></button>
+        <span id="zoomLabel" class="zoom-label">100%</span>
+        <button id="zoomIn" type="button" title="Zoom in (⌘+)" aria-label="Zoom in"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 5v10M5 10h10"/></svg></button>
+        <button id="zoomFit" type="button" class="fit" title="Fit everything (⌘0)">Fit</button>
       </div>
       <div id="dock" class="dock" role="toolbar" aria-label="Layout, theme and device" hidden>
+        <span id="scopeLabel" class="scope-chip" title="Toolbar changes apply to this. Click a screenshot to change only that one; click the background for all.">All screenshots</span>
+        <span class="dock-rule" aria-hidden="true"></span>
         <div id="layoutGrid" class="dock-group layout-grid" role="group" aria-label="Layout"></div>
         <span class="dock-rule" aria-hidden="true"></span>
         <div id="templateGrid" class="dock-group template-grid" role="group" aria-label="Theme"></div>
@@ -115,7 +114,6 @@
 
   <div id="langPop" class="pop pop-down" popover>
     <div class="card">
-      <label class="cell row-cell"><span>Showing</span><select id="langSelect"></select></label>
       <div class="cell">
         <div class="pop-title">Translate headlines <span class="pro-tag">Pro</span></div>
         <div id="langChecks" class="lang-checks" role="group" aria-label="Languages to translate into"></div>
