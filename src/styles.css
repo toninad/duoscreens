@@ -819,3 +819,16 @@ body { display: block; height: 100dvh; }
 /* Floating things that sit on the board itself take the container tone too. */
 .add-screen, .card-pose-pill { background: var(--card); }
 .card-pose .segmented button[aria-pressed=true] { background: var(--raised); }
+
+/* Floating chrome: one look everywhere. The paper tone, a hairline border and a soft, wide shadow. */
+:root { --chrome-border: color-mix(in srgb, var(--ink) 9%, transparent); --chrome-shadow: 0 1px 2px rgba(18,18,18,.04), 0 6px 16px -6px rgba(18,18,18,.08), 0 18px 40px -16px rgba(18,18,18,.12); }
+@media (prefers-color-scheme: dark) { :root { --chrome-border: rgba(255,255,255,.08); --chrome-shadow: 0 1px 2px rgba(0,0,0,.3), 0 18px 40px -16px rgba(0,0,0,.6); } }
+.top-left, .top-center, .topbar-actions, .dock, .zoom-tools, .add-screen, .card-pose-pill, .add-group, .pop .card {
+  border: 1px solid var(--chrome-border); box-shadow: var(--chrome-shadow);
+}
+.dock, .zoom-tools, .top-left, .top-center, .topbar-actions { background: color-mix(in srgb, var(--card) 88%, transparent); }
+.add-screen:hover { box-shadow: 0 0 0 1px var(--orange), var(--chrome-shadow); border-color: transparent; }
+
+/* Add device: a real button on the board, same chrome as the toolbars. */
+.add-group { border-style: solid; background: var(--card); color: var(--ink); }
+.add-group:hover { border-color: var(--orange); background: var(--card); }
