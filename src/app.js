@@ -10,7 +10,7 @@ import { makeSampleScreenshot, SAMPLE_SHOTS } from './sample.js';
 
 const $ = (id) => document.getElementById(id);
 const svg = (d) => `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${d}"/></svg>`;
-const ICONS = { up: svg('M4 10l4-4 4 4'), down: svg('M4 6l4 4 4-4'), del: svg('M4.5 4.5l7 7M11.5 4.5l-7 7') };
+const ICONS = { left: svg('M10 4l-4 4 4 4'), right: svg('M6 4l4 4-4 4'), del: svg('M5 5l6 6M11 5l-6 6') };
 const DISPLAYS = ['inner', 'outer'];
 const sizeOf = (d) => DUO_SIZES[d][state.pose[d]];
 
@@ -99,11 +99,10 @@ function renderShotList() {
   state.shots.forEach((s, i) => {
     const li = document.createElement('li');
     li.className = i === state.selected ? 'active' : '';
-    li.innerHTML = `<img alt=""><div class="meta"><b></b><small></small></div>
-      <div class="tools"><button data-a="up" title="Move up" aria-label="Move up">${ICONS.up}</button><button data-a="down" title="Move down" aria-label="Move down">${ICONS.down}</button><button data-a="del" title="Remove" aria-label="Remove">${ICONS.del}</button></div>`;
+    li.title = `${i + 1}. ${textFor(s).headline || s.name}`;
+    li.innerHTML = `<img alt=""><span class="num">${i + 1}</span>
+      <div class="tools"><button data-a="up" title="Move left" aria-label="Move left">${ICONS.left}</button><button data-a="del" title="Remove" aria-label="Remove">${ICONS.del}</button><button data-a="down" title="Move right" aria-label="Move right">${ICONS.right}</button></div>`;
     li.querySelector('img').src = s.image.src;
-    li.querySelector('b').textContent = textFor(s).headline || s.name;
-    li.querySelector('small').textContent = `${s.image.naturalWidth}×${s.image.naturalHeight}${s.outerImage ? ' · custom outer' : ''}`;
     li.onclick = (e) => {
       const a = e.target.closest('button')?.dataset.a;
       if (a === 'del') { state.shots.splice(i, 1); state.selected = Math.min(state.selected, state.shots.length - 1); }
@@ -123,20 +122,14 @@ function placeIndicator() {
   const li = list.children[state.selected];
   ind.classList.toggle('on', !!li);
   if (!li) return;
-  const pad = 14;
-  ind.style.setProperty('--y', `${li.offsetTop + pad}px`);
-  ind.style.setProperty('--h', `${li.offsetHeight - pad * 2}px`);
-  ind.style.setProperty('--x', `${li.offsetLeft - list.scrollLeft + 24}px`);
-  ind.style.setProperty('--w', `${li.offsetWidth - 48}px`);
+  ind.style.setProperty('--x', `${li.offsetLeft - list.scrollLeft + li.offsetWidth * 0.3}px`);
+  ind.style.setProperty('--w', `${li.offsetWidth * 0.4}px`);
 }
 
 function syncTextInputs() {
   const s = state.shots[state.selected];
-  const t = s ? textFor(s) : { headline: '', subheadline: '' };
-  $('headline').value = t.headline;
-  $('subheadline').value = t.subheadline;
-  $('textFor').textContent = s ? `· screenshot ${state.selected + 1}` : '';
-  for (const id of ['headline', 'subheadline', 'outerFile']) $(id).disabled = !s;
+  $('textFor').textContent = s ? `· ${state.selected + 1}` : '';
+  $('outerFile').disabled = !s;
   $('outerValue').textContent = s?.outerImage ? 'Custom image' : s?.variants ? 'Cover capture' : 'Same image';
   $('outerValue').parentElement.setAttribute('aria-disabled', String(!s));
 }
@@ -150,6 +143,7 @@ function renderLangSelect() {
     sel.appendChild(o);
   }
   sel.value = state.activeLang;
+  $('langLabel').textContent = LANGUAGES.find(l => l[0] === state.activeLang)?.[1] || state.activeLang;
 }
 
 // ---------- Preview ----------
@@ -168,12 +162,13 @@ function previewScale() {
   const wrap = document.querySelector('.stage-wrap');
   const cs = getComputedStyle(wrap);
   const gap = parseFloat(getComputedStyle($('previews')).columnGap) || 0;
-  const availW = Math.max(200, wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - gap);
+  const availW = Math.max(200, wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - (matchMedia('(max-width: 860px)').matches ? 0 : gap));
   // on narrow screens the stage grows with its content, so cap by the viewport instead
   const narrow = matchMedia('(max-width: 860px)').matches;
-  const availH = Math.max(200, narrow ? window.innerHeight * 0.55 : wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 40);
+  const availH = Math.max(200, narrow ? window.innerHeight * 0.62 : wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 40);
   const inner = sizeOf('inner'), outer = sizeOf('outer');
-  // both previews share the same pixel scale so their relative size is honest
+  // both previews share the same pixel scale so their relative size is honest; narrow screens stack them
+  if (narrow) return Math.min(availW / Math.max(inner.width, outer.width), availH / Math.max(inner.height, outer.height));
   return Math.min(availH / Math.max(inner.height, outer.height), availW / (inner.width + outer.width));
 }
 
@@ -193,6 +188,7 @@ function renderPreview() {
   $('empty').hidden = !!shot;
   $('previews').hidden = !shot;
   $('dock').hidden = !shot;
+  $('filmstrip').hidden = !shot;
   if (!shot) return;
   ensurePreviewStages();
   const s = previewScale();
@@ -202,8 +198,88 @@ function renderPreview() {
     $(d + 'Size').textContent = `${size.width} × ${size.height}`;
     p.stage.size({ width: Math.round(size.width * s), height: Math.round(size.height * s) });
     p.stage.scale({ x: s, y: s });
-    buildComposition(p.layer, size, compositionProps(shot, d));
+    const nodes = buildComposition(p.layer, size, { ...compositionProps(shot, d), hide: editing?.display === d ? editing.key : null });
+    placeTextHits(d, nodes, s);
   }
+  if (editing) positionEditor();
+}
+
+// ---------- Inline text editing ----------
+// Each preview gets transparent hit areas over its headline and subheadline. Clicking one opens a
+// textarea styled like the rendered text, placed exactly over it; the canvas hides that text meanwhile.
+let editing = null;          // { display, key }
+const hitRects = {};         // display -> { headline: {x,y,width,height,node}, subheadline: ... }
+
+function placeTextHits(display, nodes, scale) {
+  const box = document.querySelector(`.text-hits[data-display="${display}"]`);
+  hitRects[display] = {};
+  box.innerHTML = '';
+  for (const key of ['headline', 'subheadline']) {
+    const node = nodes[key];
+    const r = node.getClientRect();
+    const empty = !node.text();
+    const rect = { x: r.x, y: r.y, width: Math.max(r.width, empty ? node.width() * scale : 0), height: Math.max(r.height, node.fontSize() * scale * 1.3), node, scale };
+    if (empty && key === 'subheadline') rect.y = nodes.headline.getClientRect().y + nodes.headline.getClientRect().height + 4;
+    hitRects[display][key] = rect;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'text-hit' + (empty ? ' empty' : '');
+    b.dataset.key = key;
+    b.setAttribute('aria-label', `Edit ${key}`);
+    if (empty) b.textContent = key === 'headline' ? 'Add headline' : 'Add subheadline';
+    Object.assign(b.style, { left: `${rect.x - 6}px`, top: `${rect.y - 4}px`, width: `${rect.width + 12}px`, height: `${rect.height + 8}px` });
+    b.onclick = () => startEditing(display, key);
+    box.appendChild(b);
+  }
+}
+
+function startEditing(display, key) {
+  editing = { display, key };
+  const ed = $('inlineEditor');
+  ed.value = textFor(state.shots[state.selected])[key] || '';
+  ed.placeholder = key === 'headline' ? 'Your best feature' : 'One line that explains it';
+  ed.hidden = false;
+  renderPreview();
+  ed.focus();
+  ed.setSelectionRange(ed.value.length, ed.value.length);
+}
+
+function positionEditor() {
+  const ed = $('inlineEditor');
+  const r = hitRects[editing.display]?.[editing.key];
+  if (!r) return;
+  const n = r.node, k = r.scale;
+  const host = document.querySelector(`.text-hits[data-display="${editing.display}"]`).getBoundingClientRect();
+  const width = n.width() * k;
+  const left = host.left + n.getAbsolutePosition().x - n.offsetX() * k;
+  Object.assign(ed.style, {
+    left: `${left + window.scrollX}px`, top: `${host.top + r.y + window.scrollY}px`, width: `${width}px`,
+    font: `${n.fontStyle()} ${n.fontSize() * k}px ${n.fontFamily().includes(',') ? n.fontFamily() : `"${n.fontFamily()}"`}`,
+    lineHeight: String(n.lineHeight()), letterSpacing: `${n.letterSpacing() * k}px`,
+    color: n.fill(), textAlign: n.align(),
+  });
+  ed.style.height = 'auto';
+  ed.style.height = `${ed.scrollHeight}px`;
+}
+
+function setupInlineEditor() {
+  const ed = $('inlineEditor');
+  ed.oninput = () => {
+    const s = state.shots[state.selected];
+    if (!s || !editing) return;
+    s.text[state.activeLang] = { ...textFor(s), [editing.key]: ed.value.replace(/\n/g, ' ') };
+    renderPreview();
+    renderShotList();
+  };
+  ed.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); ed.blur(); }
+    if (e.key === 'Tab' && editing) {   // Tab hops between headline and subheadline
+      e.preventDefault();
+      const next = editing.key === 'headline' ? 'subheadline' : 'headline';
+      startEditing(editing.display, next);
+    }
+  };
+  ed.onblur = () => { setTimeout(() => { if (document.activeElement !== ed) { editing = null; ed.hidden = true; renderPreview(); } }); };
 }
 
 function refresh() {
@@ -291,7 +367,6 @@ function setupDropzone() {
     const blob = await makeSampleScreenshot(width, height);
     addFiles([new File([blob], 'sample-screenshot.png', { type: 'image/png' })]);
   };
-  $('sampleBtn').onclick = addSample;
   $('emptySample').onclick = addSample;
   $('emptyAdd').onclick = () => $('fileInput').click();
   $('shotList').addEventListener('scroll', placeIndicator, { passive: true });
@@ -299,21 +374,12 @@ function setupDropzone() {
 
 // ---------- Text & style inputs ----------
 function setupInputs() {
-  const onText = (key) => (e) => {
-    const s = state.shots[state.selected];
-    if (!s) return;
-    s.text[state.activeLang] = { ...textFor(s), [key]: e.target.value };
-    renderPreview();
-    renderShotList();
-  };
-  $('headline').oninput = onText('headline');
-  $('subheadline').oninput = onText('subheadline');
   $('headlineScale').oninput = (e) => { state.style.headlineScale = +e.target.value; renderPreview(); };
   for (const k of ['bg1', 'bg2', 'textColor']) $(k).oninput = (e) => { state.style[k] = e.target.value; renderPreview(); };
   const fs = $('fontSelect');
   for (const [k, f] of Object.entries(FONTS)) fs.add(new Option(f.label, k));
   fs.onchange = (e) => { state.style.font = e.target.value; renderPreview(); };
-  $('langSelect').onchange = (e) => { state.activeLang = e.target.value; refresh(); };
+  $('langSelect').onchange = (e) => { state.activeLang = e.target.value; renderLangSelect(); refresh(); };
   $('outerFile').onchange = async (e) => {
     const s = state.shots[state.selected];
     if (s && e.target.files[0]) { s.outerImage = await loadImage(e.target.files[0]); refresh(); }
@@ -474,6 +540,7 @@ async function boot() {
   ].map(s => { const [f, w] = s.split(':'); return document.fonts.load(`${w} 40px "${f}"`, 'AaČć'); })).catch(() => {});
   const colors = await loadFrames();
   setupInputs();
+  setupInlineEditor();
   setupDevice(colors);
   setTemplate('paper');
   setupDropzone();

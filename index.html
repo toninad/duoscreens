@@ -20,27 +20,27 @@
       <span class="brand-title">Duo Screenshot Studio</span>
     </div>
     <div class="topbar-actions">
-      <span id="licenseBadge" class="badge">Free · watermark</span>
+      <button id="langBtn" class="pill-btn" popovertarget="langPop" title="Language and translation">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.2"/><path d="M2.8 10h14.4M10 2.8c2 2 2.9 4.4 2.9 7.2S12 15.2 10 17.2C8 15.2 7.1 12.8 7.1 10S8 4.8 10 2.8z"/></svg>
+        <span id="langLabel">English</span>
+      </button>
+      <button id="licenseBadge" class="pill-btn badge" popovertarget="licensePop">Free · watermark</button>
       <button id="exportBtn" class="btn primary" disabled>Export</button>
     </div>
   </header>
 
   <main class="layout">
-    <aside class="panel left" aria-label="Screenshots">
-      <h2>Screenshots</h2>
-      <label id="dropzone" class="dropzone" tabindex="0">
-        <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
-        <span class="dz-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg></span>
-        <span class="dz-text"><strong>Add screenshots</strong><small>Drop PNG or JPEG here</small></span>
-      </label>
-      <div class="shot-list-wrap">
-        <ol id="shotList" class="shot-list" aria-label="Screenshots"></ol>
-        <span id="shotIndicator" class="shot-indicator" aria-hidden="true"></span>
-      </div>
-      <button id="sampleBtn" class="link-btn">Try a sample screenshot</button>
-    </aside>
-
     <section class="stage-wrap">
+      <div id="filmstrip" class="filmstrip" hidden>
+        <label id="dropzone" class="add-shot" tabindex="0" title="Add screenshots (or drop them anywhere)">
+          <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>
+        </label>
+        <div class="shot-list-wrap">
+          <ol id="shotList" class="shot-list" aria-label="Screenshots"></ol>
+          <span id="shotIndicator" class="shot-indicator" aria-hidden="true"></span>
+        </div>
+      </div>
       <div id="empty" class="empty">
         <svg class="duo-sketch" viewBox="0 0 264 132" aria-hidden="true">
           <!-- unfolded: wide inner display -->
@@ -59,11 +59,11 @@
       </div>
       <div id="previews" class="previews" hidden>
         <figure>
-          <div id="stageInner" class="stage"></div>
+          <div class="stage-box"><div id="stageInner" class="stage"></div><div class="text-hits" data-display="inner"></div></div>
           <figcaption><b>Inner display</b><span id="innerSize"></span></figcaption>
         </figure>
         <figure>
-          <div id="stageOuter" class="stage"></div>
+          <div class="stage-box"><div id="stageOuter" class="stage"></div><div class="text-hits" data-display="outer"></div></div>
           <figcaption><b>Outer display</b><span id="outerSize"></span></figcaption>
         </figure>
       </div>
@@ -87,70 +87,60 @@
           <span id="colorSwatches" class="swatches"></span>
           <span id="colorName" class="dock-label"></span>
         </div>
+        <span class="dock-rule" aria-hidden="true"></span>
+        <button id="styleBtn" class="dock-btn" popovertarget="stylePop" title="Colors, font and text size">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M4 10h12M4 14h12"/><circle cx="7" cy="6" r="1.8"/><circle cx="13" cy="10" r="1.8"/><circle cx="9" cy="14" r="1.8"/></svg>
+          Style
+        </button>
       </div>
     </section>
 
-    <aside class="panel right" aria-label="Design">
-      <section class="group">
-        <h2>Text <span class="muted" id="textFor"></span></h2>
-        <div class="card">
-          <label class="cell row-cell">
-            <span>Language</span>
-            <select id="langSelect"></select>
-          </label>
-          <label class="cell stacked">
-            <span>Headline</span>
-            <textarea id="headline" rows="2" placeholder="Your best feature, in 3–6 words"></textarea>
-          </label>
-          <label class="cell stacked">
-            <span>Subheadline</span>
-            <textarea id="subheadline" rows="2" placeholder="One line that explains it"></textarea>
-          </label>
-          <label class="cell row-cell">
-            <span>Text size</span>
-            <input id="headlineScale" type="range" min="0.7" max="1.4" step="0.05" value="1">
-          </label>
-          <label class="cell row-cell chevron">
-            <span>Outer display</span>
-            <span id="outerValue" class="value">Same image</span>
-            <input id="outerFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
-          </label>
-        </div>
-        <p class="footnote">Use a real cover-screen capture for the outer display if you have one.</p>
-      </section>
-
-      <section class="group">
-        <h2>Style</h2>
-        <div class="card">
-          <label class="cell row-cell"><span>Background</span><input id="bg1" type="color"></label>
-          <label class="cell row-cell"><span>Gradient</span><input id="bg2" type="color"></label>
-          <label class="cell row-cell"><span>Text</span><input id="textColor" type="color"></label>
-          <label class="cell row-cell"><span>Font</span><select id="fontSelect"></select></label>
-        </div>
-      </section>
-
-      <section class="group">
-        <div class="card">
-          <details id="translateDetails" class="cell">
-            <summary>Translate headlines</summary>
-            <div class="inline">
-              <select id="translateTarget"></select>
-              <button id="translateBtn" class="btn small">Translate</button>
-            </div>
-            <p id="translateStatus" class="hint"></p>
-          </details>
-          <details id="licenseDetails" class="cell">
-            <summary>License</summary>
-            <div class="inline">
-              <input id="licenseKey" type="text" placeholder="License key" autocomplete="off" spellcheck="false">
-              <button id="licenseBtn" class="btn small">Unlock</button>
-            </div>
-            <p id="licenseStatus" class="hint">Free exports include a small watermark. <a id="buyLink" href="#">Get a license</a>: €19 per app or €49 lifetime.</p>
-          </details>
-        </div>
-      </section>
-    </aside>
   </main>
+
+
+  <div id="stylePop" class="pop pop-up" popover>
+    <div class="card">
+      <label class="cell row-cell"><span>Background</span><input id="bg1" type="color"></label>
+      <label class="cell row-cell"><span>Tone</span><input id="bg2" type="color"></label>
+      <label class="cell row-cell"><span>Text</span><input id="textColor" type="color"></label>
+      <label class="cell row-cell"><span>Font</span><select id="fontSelect"></select></label>
+      <label class="cell row-cell"><span>Text size</span><input id="headlineScale" type="range" min="0.7" max="1.4" step="0.05" value="1"></label>
+      <label class="cell row-cell chevron" title="Use a real cover-screen capture for the outer display">
+        <span>Outer display <span class="muted" id="textFor"></span></span>
+        <span id="outerValue" class="value">Same image</span>
+        <input id="outerFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+      </label>
+    </div>
+  </div>
+
+  <div id="langPop" class="pop pop-down" popover>
+    <div class="card">
+      <label class="cell row-cell"><span>Showing</span><select id="langSelect"></select></label>
+      <div class="cell">
+        <div class="pop-title">Translate headlines</div>
+        <div class="inline">
+          <select id="translateTarget"></select>
+          <button id="translateBtn" class="btn small">Translate</button>
+        </div>
+        <p id="translateStatus" class="hint"></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="licensePop" class="pop pop-down" popover>
+    <div class="card">
+      <div class="cell">
+        <div class="pop-title">License</div>
+        <div class="inline">
+          <input id="licenseKey" type="text" placeholder="License key" autocomplete="off" spellcheck="false">
+          <button id="licenseBtn" class="btn small">Unlock</button>
+        </div>
+        <p id="licenseStatus" class="hint">Free exports include a small watermark. <a id="buyLink" href="#">Get a license</a>: €19 per app or €49 lifetime.</p>
+      </div>
+    </div>
+  </div>
+
+  <textarea id="inlineEditor" class="inline-editor" rows="1" spellcheck="true" hidden></textarea>
 
   <div id="toast" class="toast" role="status" hidden></div>
 

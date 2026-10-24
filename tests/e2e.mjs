@@ -83,8 +83,13 @@ try {
   check(true, 'Uploaded 2 screenshots via file input');
 
   // Edit headline of screenshot 1
-  await page.fill('#headline', 'Your podcasts, unfolded');
-  await page.fill('#subheadline', 'Browse and listen side by side on iPhone Duo.');
+  // Edit text inline: click the headline on the inner preview, type, then Tab to the subheadline.
+  await page.click('.text-hits[data-display="inner"] [data-key="headline"]');
+  await page.fill('#inlineEditor', 'Your podcasts, unfolded');
+  await page.keyboard.press('Tab');
+  await page.fill('#inlineEditor', 'Browse and listen side by side on iPhone Duo.');
+  await page.keyboard.press('Enter');
+  check(await page.isHidden('#inlineEditor'), 'Inline editor closes on Enter');
   const h = await page.evaluate(() => window.__dss.state.shots[0].text.en.headline);
   check(h === 'Your podcasts, unfolded', 'Headline edit stored');
 
@@ -101,13 +106,14 @@ try {
   await page.click('[data-layout="peek-left"]');
 
   // Translate (mocked endpoint)
-  await page.click('#translateDetails summary');
+  await page.click('#langBtn');
   await page.selectOption('#translateTarget', 'de');
   await page.click('#translateBtn');
   await page.waitForFunction(() => window.__dss.state.langs.includes('de'));
   const deText = await page.evaluate(() => window.__dss.state.shots[1].text.de.headline);
   check(deText === 'Mach da weiter, wo du aufgehört hast', `Translation applied: "${deText}"`);
   await page.selectOption('#langSelect', 'en');
+  await page.keyboard.press('Escape');
 
   await fs.mkdir(path.join(root, 'docs'), { recursive: true });
   await page.waitForTimeout(300);
@@ -118,7 +124,7 @@ try {
   const freePngs = await verifyZip(free.zip, 'free', 8);
 
   // Unlock with dev key, export again
-  await page.click('#licenseDetails summary');
+  await page.click('#licenseBadge');
   await page.fill('#licenseKey', 'not-a-real-key');
   await page.click('#licenseBtn');
   check(!(await page.evaluate(() => window.__dss.state.licensed)), 'Invalid key stays locked');
@@ -126,6 +132,7 @@ try {
   await page.click('#licenseBtn');
   await page.waitForFunction(() => window.__dss.state.licensed === true);
   check(true, 'Dev license key unlocks');
+  await page.keyboard.press('Escape');
   const pro = await exportZip(page, 'pro');
   const proPngs = await verifyZip(pro.zip, 'pro', 8);
 

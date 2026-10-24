@@ -98,7 +98,8 @@ function place(layout, w, h, aspect, measureText) {
 /**
  * @param {Konva.Layer} layer
  * @param {{width:number,height:number}} size  exact export size
- * @param {object} p  { image, frame, headline, subheadline, style, watermark, watermarkText }
+ * @param {object} p  { image, frame, headline, subheadline, style, watermark, watermarkText, hide }
+ *   hide = 'headline' | 'subheadline' while that text is being edited inline
  *   style = { template, layout, bg1, bg2, textColor, font, headlineScale }
  *   frame = { img, geo } from frames.js
  */
@@ -183,9 +184,13 @@ export function buildComposition(layer, size, p) {
     }
   }
 
-  // Text on top of the device, so bleed layouts never hide the headline
+  // Text on top of the device, so bleed layouts never hide the headline. Both nodes are always on
+  // the layer (an empty one is just transparent) so the editor can find where they sit; the one
+  // being edited inline is hidden while its textarea covers it.
   layer.add(text.headline);
-  if (p.subheadline) layer.add(text.sub);
+  layer.add(text.sub);
+  if (p.hide === 'headline') text.headline.opacity(0);
+  if (p.hide === 'subheadline' || !p.subheadline) text.sub.opacity(0);
 
   if (p.watermark) {
     const fs = Math.round(base * 0.019);
@@ -197,4 +202,5 @@ export function buildComposition(layer, size, p) {
     layer.add(label);
   }
   layer.batchDraw();
+  return { headline: text.headline, subheadline: text.sub };
 }
