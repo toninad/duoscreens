@@ -881,8 +881,12 @@ const SCREEN_ICON = {
 };
 const CHECK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8.5l2.6 2.5L12 5.5"/></svg>';
 const SKETCH = {
+  // iPhone, drawn to the real proportions: body ≈ 0.49 : 1, corners ≈ 15% of the width,
+  // a slim Dynamic Island ≈ 22% of the width, side buttons.
   iphone: `<svg viewBox="0 0 220 120" aria-hidden="true">
-    <rect x="85" y="5" width="50" height="110" rx="11"/><rect x="101" y="11" width="18" height="5.5" rx="2.75" class="ink"/></svg>`,
+    <rect x="83" y="5" width="54" height="110" rx="8.5"/>
+    <rect x="104" y="11.3" width="12" height="3.4" rx="1.7" class="ink"/>
+    <path d="M81.6 21v5M81.6 29.5v8M81.6 40v8M138.4 32v13" class="btn"/></svg>`,
   duo: `<svg viewBox="0 0 220 120" aria-hidden="true">
     <path d="M73 8h60a14 14 0 0 1 14 14v76a14 14 0 0 1-14 14H73z"/><circle cx="134" cy="21" r="4.2" class="ink"/></svg>`,
   ipad: `<svg viewBox="0 0 220 120" aria-hidden="true">
