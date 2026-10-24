@@ -309,6 +309,20 @@ input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border: 0; bord
 .pop:popover-open { animation: rise .25s var(--ease); }
 .pop-title { font-weight: 600; margin-bottom: 10px; }
 
+/* Pro popover and translate checklist */
+.pro-tag { display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 999px; font: 600 10px/1.4 var(--sans); letter-spacing: .04em; text-transform: uppercase; color: var(--orange); background: color-mix(in srgb, var(--orange) 12%, transparent); vertical-align: 2px; }
+.pop-title.small { font-size: 13px; margin: 16px 0 8px; color: var(--muted); font-weight: 600; }
+.pro-pitch { margin: -4px 0 14px; font-size: 13px; }
+.btn.buy { display: flex; justify-content: center; width: 100%; padding: 11px 16px; font-size: 15px; text-decoration: none; }
+.btn.disabled { opacity: .35; pointer-events: none; }
+.lang-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 10px; max-height: 236px; overflow-y: auto; margin: 0 -4px 12px; padding: 2px 4px; }
+.lang-check { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 7px; font-size: 13px; cursor: pointer; min-width: 0; }
+.lang-check:hover { background: var(--fill); }
+.lang-check span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lang-check input { accent-color: var(--ink); margin: 0; flex: none; }
+.lang-check.done span::after { content: ' ✓'; color: var(--orange); }
+#translateCount { font-size: 13px; flex: 1; }
+
 /* Disclosure rows */
 details summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; min-height: 24px; }
 details summary::-webkit-details-marker { display: none; }

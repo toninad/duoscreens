@@ -28,40 +28,30 @@ export const DUO_SIZES = Object.freeze({
 
 
 /**
- * Translate endpoint. Leave empty to disable the "Translate" button.
- * Point it at the Supabase edge function once deployed, e.g.
- *   https://<project-ref>.supabase.co/functions/v1/translate
- * Contract: POST { targetLanguage, sourceLanguage, texts: string[] }
- *        -> 200 { translations: string[] }  (same order/length as texts)
+ * Server endpoints (Cloudflare Pages Functions in functions/api/). Same origin as the app.
+ * globalThis.DSS_API_BASE lets tests or a local setup point them elsewhere.
  */
-// (globalThis.DSS_TRANSLATE_ENDPOINT lets you override it without editing, e.g. in tests.)
-export const TRANSLATE_ENDPOINT = globalThis.DSS_TRANSLATE_ENDPOINT || '';
+const API_BASE = globalThis.DSS_API_BASE || '';
+export const LICENSE_ENDPOINT = `${API_BASE}/api/license`;
+export const TRANSLATE_ENDPOINT = `${API_BASE}/api/translate`;
 
-/** Optional headers for the translate endpoint (e.g. Supabase anon key). Never put secret keys here. */
-export const TRANSLATE_HEADERS = {
-  // 'Authorization': 'Bearer <SUPABASE_ANON_KEY>',
-};
-
-/**
- * Licensing (Lemon Squeezy). Disabled until a product exists.
- * When enabled, the app POSTs to the public License API:
- *   POST https://api.lemonsqueezy.com/v1/licenses/validate  (form fields: license_key, [instance_id])
- * and checks `valid === true` plus that meta.store_id / meta.product_id match below.
- */
-export const LICENSE = {
-  lemonSqueezyEnabled: false,
-  validateUrl: 'https://api.lemonsqueezy.com/v1/licenses/validate',
-  storeId: null,       // TODO: your Lemon Squeezy store id (number)
-  productIds: [],      // TODO: product ids that unlock (e.g. per-app €19, lifetime €49)
-  // Local development key so the unlocked flow can be tested before Lemon Squeezy is set up.
-  devKey: 'DUO-DEV-UNLOCK',
-  buyUrl: '#',         // TODO: Lemon Squeezy checkout link
+/** Pro is a one-time purchase on Polar, which emails a license key after checkout. */
+export const PRO = {
+  price: '€15.99',
+  // TODO: the Polar checkout link for the Pro product (Polar > Products > Checkout links).
+  checkoutUrl: '',
 };
 
 export const WATERMARK_TEXT = 'Made with Duo Screenshot Studio';
 
+// App Store Connect localizations. Keep in sync with functions/_lib/languages.js.
 export const LANGUAGES = [
-  ['en', 'English'], ['de', 'German'], ['fr', 'French'], ['es', 'Spanish'], ['it', 'Italian'],
-  ['pt-BR', 'Portuguese (Brazil)'], ['nl', 'Dutch'], ['hr', 'Croatian'], ['pl', 'Polish'],
-  ['sv', 'Swedish'], ['ja', 'Japanese'], ['ko', 'Korean'], ['zh-Hans', 'Chinese (Simplified)'],
+  ['en', 'English'], ['en-GB', 'English (UK)'], ['en-AU', 'English (Australia)'], ['en-CA', 'English (Canada)'],
+  ['de', 'German'], ['fr', 'French'], ['fr-CA', 'French (Canada)'], ['es', 'Spanish (Spain)'], ['es-MX', 'Spanish (Mexico)'],
+  ['it', 'Italian'], ['pt-BR', 'Portuguese (Brazil)'], ['pt-PT', 'Portuguese (Portugal)'], ['nl', 'Dutch'],
+  ['ja', 'Japanese'], ['ko', 'Korean'], ['zh-Hans', 'Chinese (Simplified)'], ['zh-Hant', 'Chinese (Traditional)'],
+  ['sv', 'Swedish'], ['da', 'Danish'], ['no', 'Norwegian'], ['fi', 'Finnish'], ['pl', 'Polish'], ['cs', 'Czech'],
+  ['sk', 'Slovak'], ['hu', 'Hungarian'], ['ro', 'Romanian'], ['hr', 'Croatian'], ['el', 'Greek'], ['tr', 'Turkish'],
+  ['ru', 'Russian'], ['uk', 'Ukrainian'], ['ar', 'Arabic'], ['he', 'Hebrew'], ['hi', 'Hindi'], ['th', 'Thai'],
+  ['vi', 'Vietnamese'], ['id', 'Indonesian'], ['ms', 'Malay'], ['ca', 'Catalan'],
 ];

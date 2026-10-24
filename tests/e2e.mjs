@@ -53,14 +53,24 @@ try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 1, acceptDownloads: true });
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-  // Mock translation endpoint (the real one is the Supabase function).
-  await page.addInitScript(() => { window.DSS_TRANSLATE_ENDPOINT = 'https://translate.mock/functions/v1/translate'; });
-  await page.route('https://translate.mock/**', async route => {
+  // Failed requests (e.g. the 404 for a wrong license key) are expected; other console errors are not.
+  page.on('console', m => { if (m.type() === 'error' && !m.text().startsWith('Failed to load resource')) errors.push(m.text()); });
+  // Fake the server functions (/api/license and /api/translate); they have their own tests.
+  const PRO_KEY = 'TEST-PRO-KEY-123';
+  await page.route('**/api/license', async route => {
+    const { key, device } = route.request().postDataJSON();
+    const ok = key === PRO_KEY && /^[0-9a-f-]{36}$/.test(device);
+    await route.fulfill({ status: ok ? 200 : 404, json: { valid: ok, message: ok ? 'Pro unlocked. Thank you!' : 'That license key was not found.' } });
+  });
+  let translateRequests = 0;
+  await page.route('**/api/translate', async route => {
+    translateRequests++;
     const body = route.request().postDataJSON();
+    if (body.key !== PRO_KEY) return route.fulfill({ status: 403, json: { error: 'Pro only' } });
     const de = { 'Built for the big screen': 'Gemacht für den großen Bildschirm', 'Everything you need, side by side on iPhone Duo.': 'Alles, was du brauchst – nebeneinander auf dem iPhone Duo.',
       'Pick up where you left off': 'Mach da weiter, wo du aufgehört hast', 'Fold or unfold — your place follows you.': 'Zu- oder aufgeklappt – deine Stelle folgt dir.' };
-    await route.fulfill({ json: { translations: body.texts.map(t => de[t] || `[${body.targetLanguage}] ${t}`) }, headers: { 'Access-Control-Allow-Origin': '*' } });
+    const translations = Object.fromEntries(body.targetLanguages.map(l => [l, body.texts.map(t => (l === 'de' && de[t]) || `[${l}] ${t}`)]));
+    await route.fulfill({ json: { translations, failed: [], usage: { runs: body.targetLanguages.length, limit: 100 } } });
   });
 
   await page.goto(BASE + '/index.html');
@@ -105,46 +115,60 @@ try {
   await page.click('[data-template="paper"]');
   await page.click('[data-layout="peek-left"]');
 
-  // Translate (mocked endpoint)
+  // Translation is Pro only: without a license the button offers Pro instead of calling the server.
   await page.click('#langBtn');
-  await page.selectOption('#translateTarget', 'de');
+  await page.check('#langChecks input[value="de"]');
+  await page.check('#langChecks input[value="ja"]');
+  check((await page.textContent('#translateBtn')).includes('Get Pro'), 'Translate asks for Pro while unlicensed');
   await page.click('#translateBtn');
-  await page.waitForFunction(() => window.__dss.state.langs.includes('de'));
-  const deText = await page.evaluate(() => window.__dss.state.shots[1].text.de.headline);
-  check(deText === 'Mach da weiter, wo du aufgehört hast', `Translation applied: "${deText}"`);
-  await page.selectOption('#langSelect', 'en');
+  check(await page.isVisible('#licensePop') && translateRequests === 0, 'Translate opens the Pro popover without calling the server');
   await page.keyboard.press('Escape');
 
   await fs.mkdir(path.join(root, 'docs'), { recursive: true });
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(root, 'docs', 'editor.png') });
 
-  // Free export (watermark): 2 langs × 2 shots × 2 displays = 8
+  // Free export (watermark): 1 language × 2 shots × 2 displays = 4
   const free = await exportZip(page, 'free');
-  const freePngs = await verifyZip(free.zip, 'free', 8);
+  const freePngs = await verifyZip(free.zip, 'free', 4);
 
-  // Unlock with dev key, export again
+  // Unlock: a wrong key stays locked, the Pro key unlocks
   await page.click('#licenseBadge');
+  check((await page.textContent('#buyBtn')).includes('€15.99'), 'Pro price shown');
   await page.fill('#licenseKey', 'not-a-real-key');
   await page.click('#licenseBtn');
+  await page.waitForFunction(() => /not found/.test(document.getElementById('licenseStatus').textContent));
   check(!(await page.evaluate(() => window.__dss.state.licensed)), 'Invalid key stays locked');
-  await page.fill('#licenseKey', 'DUO-DEV-UNLOCK');
+  await page.fill('#licenseKey', PRO_KEY);
   await page.click('#licenseBtn');
   await page.waitForFunction(() => window.__dss.state.licensed === true);
-  check(true, 'Dev license key unlocks');
+  check(true, 'Pro key unlocks');
   await page.keyboard.press('Escape');
-  const pro = await exportZip(page, 'pro');
-  const proPngs = await verifyZip(pro.zip, 'pro', 8);
 
-  const innerName = proPngs.find(n => n.startsWith('en/') && n.includes('-inner-') && n.endsWith('01.png'));
-  const a = await free.zip.file(innerName).async('nodebuffer');
-  const b = await pro.zip.file(innerName).async('nodebuffer');
+  // Translate into German and Japanese in one go
+  await page.click('#langBtn');
+  await page.check('#langChecks input[value="de"]');
+  await page.check('#langChecks input[value="ja"]');
+  await page.click('#translateBtn');
+  await page.waitForFunction(() => ['de', 'ja'].every(l => window.__dss.state.langs.includes(l)));
+  const deText = await page.evaluate(() => window.__dss.state.shots[1].text.de.headline);
+  check(deText === 'Mach da weiter, wo du aufgehört hast', `Translation applied: "${deText}"`);
+  await page.selectOption('#langSelect', 'en');
+  await page.keyboard.press('Escape');
+
+  // Pro export: 3 languages × 2 shots × 2 displays = 12, no watermark
+  const pro = await exportZip(page, 'pro');
+  const proPngs = await verifyZip(pro.zip, 'pro', 12);
+  const freeInner = freePngs.find(n => n.includes('-inner-') && n.endsWith('01.png'));
+  const proInner = proPngs.find(n => n.startsWith('en/') && n.includes('-inner-') && n.endsWith('01.png'));
+  const a = await free.zip.file(freeInner).async('nodebuffer');
+  const b = await pro.zip.file(proInner).async('nodebuffer');
   check(!a.equals(b), 'Watermark removed after unlock (free and pro renders differ)');
   await fs.writeFile(path.join(root, 'docs', 'sample-export.png'), b);
-  const outerName = freePngs.find(n => n.startsWith('en/') && n.includes('-outer-') && n.endsWith('01.png'));
+  const outerName = freePngs.find(n => n.includes('-outer-') && n.endsWith('01.png'));
   await fs.writeFile(path.join(root, 'docs', 'sample-export-outer-free.png'), await free.zip.file(outerName).async('nodebuffer'));
-  const deInner = freePngs.find(n => n.startsWith('de/') && n.includes('-inner-') && n.endsWith('02.png'));
-  await fs.writeFile(path.join(out, 'de-inner-02.png'), await free.zip.file(deInner).async('nodebuffer'));
+  const deInner = proPngs.find(n => n.startsWith('de/') && n.includes('-inner-') && n.endsWith('02.png'));
+  await fs.writeFile(path.join(out, 'de-inner-02.png'), await pro.zip.file(deInner).async('nodebuffer'));
 
   // Landscape poses export Apple's landscape sizes, in both finishes.
   await page.click('.segmented[data-pose="inner"] [data-v="landscape"]');
@@ -155,7 +179,7 @@ try {
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(out, 'landscape.png') });
   const land = await exportZip(page, 'landscape');
-  const landPngs = await verifyZip(land.zip, 'landscape', 8);
+  const landPngs = await verifyZip(land.zip, 'landscape', 12);
   check(landPngs.every(n => n.includes('2853x2007') || n.includes('2034x1398')), 'Landscape export uses 2853×2007 and 2034×1398');
 
   check(errors.length === 0, `No page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);

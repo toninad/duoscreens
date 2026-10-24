@@ -1,46 +1,47 @@
-import { LICENSE } from './config.js';
+// Pro license: checked by the server (functions/api/license.js), which talks to Polar.
+// The key and a per-browser device id are kept in localStorage; a successful check is trusted
+// offline for a few days so the app keeps working without a connection.
+import { LICENSE_ENDPOINT } from './config.js';
 
-const STORAGE_KEY = 'dss.licenseKey';
+const KEY = 'dss.licenseKey';
+const DEVICE = 'dss.deviceId';
+const LAST_OK = 'dss.licenseOkAt';
+const OFFLINE_GRACE = 7 * 24 * 60 * 60 * 1000;
 
-export function storedLicenseKey() {
-  try { return localStorage.getItem(STORAGE_KEY) || ''; } catch { return ''; }
+const get = (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
+const set = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {} };
+
+export const storedLicenseKey = () => get(KEY);
+
+export function deviceId() {
+  let id = get(DEVICE);
+  if (!id) { id = crypto.randomUUID(); set(DEVICE, id); }
+  return id;
 }
-export function storeLicenseKey(key) {
-  try { key ? localStorage.setItem(STORAGE_KEY, key) : localStorage.removeItem(STORAGE_KEY); } catch {}
-}
 
-/**
- * Check a license key. Returns { valid: boolean, message: string }.
- *
- * STUB: until Lemon Squeezy is set up, only LICENSE.devKey unlocks.
- * TODO(lemon-squeezy): set LICENSE.lemonSqueezyEnabled = true with storeId/productIds, then this calls
- *   POST https://api.lemonsqueezy.com/v1/licenses/validate  (application/x-www-form-urlencoded: license_key)
- * which is Lemon Squeezy's public License API (no secret API key needed). Response: { valid, error,
- * license_key: { status, ... }, meta: { store_id, product_id, ... } }.
- * TODO: verify CORS from the browser works; if not, proxy through a Supabase edge function.
- * TODO: optionally call /v1/licenses/activate once per device and keep the instance_id.
- * Note: any client-side check can be bypassed by a determined user; that's acceptable for a €19 tool.
- */
+/** @returns {Promise<{ valid: boolean, message: string }>} */
 export async function checkLicense(key) {
   key = (key || '').trim();
-  if (!key) return { valid: false, message: 'Enter a license key.' };
-  if (LICENSE.devKey && key === LICENSE.devKey) return { valid: true, message: 'Developer key accepted (stub).' };
-  if (!LICENSE.lemonSqueezyEnabled) {
-    return { valid: false, message: 'License check not configured yet (Lemon Squeezy stub).' };
-  }
+  if (!key) return { valid: false, message: 'Enter the license key from your receipt email.' };
+  let res;
   try {
-    const res = await fetch(LICENSE.validateUrl, {
+    res = await fetch(LICENSE_ENDPOINT, {
       method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ license_key: key }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, device: deviceId() }),
     });
-    const data = await res.json();
-    if (!data.valid) return { valid: false, message: data.error || 'Invalid license key.' };
-    const m = data.meta || {};
-    if (LICENSE.storeId && m.store_id !== LICENSE.storeId) return { valid: false, message: 'Key is for a different store.' };
-    if (LICENSE.productIds.length && !LICENSE.productIds.includes(m.product_id)) return { valid: false, message: 'Key is for a different product.' };
-    return { valid: true, message: `Unlocked: ${m.product_name || 'license'} (${data.license_key?.status || 'active'}).` };
-  } catch (e) {
-    return { valid: false, message: 'Could not reach the license server: ' + e.message };
+  } catch {
+    // Offline: keep Pro for a while if this key was confirmed recently.
+    const ok = get(KEY) === key && Date.now() - Number(get(LAST_OK) || 0) < OFFLINE_GRACE;
+    return { valid: ok, message: ok ? 'Offline: using your saved license.' : 'Could not reach the license server. Check your connection.' };
   }
+  // Static hosting without the server functions answers with a non-JSON error page.
+  if (!res.headers.get('content-type')?.includes('json')) {
+    return { valid: false, message: 'Licensing is not available on this deployment.' };
+  }
+  let data = {};
+  try { data = await res.json(); } catch {}
+  if (data.valid) { set(KEY, key); set(LAST_OK, String(Date.now())); }
+  else if (res.status === 403 || res.status === 404) { set(KEY, ''); set(LAST_OK, ''); }
+  return { valid: !!data.valid, message: data.message || `License check failed (${res.status}).` };
 }

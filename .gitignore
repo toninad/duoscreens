@@ -2,5 +2,7 @@ node_modules
 .DS_Store
 *.zip
 tests/out/
-supabase/.temp/
+.dev.vars
 .env
+_site/
+.wrangler/

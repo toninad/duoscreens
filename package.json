@@ -1,0 +1,15 @@
+{
+  "name": "duo-screenshot-studio",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test:functions": "node --test tests/functions.test.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

@@ -117,10 +117,11 @@
     <div class="card">
       <label class="cell row-cell"><span>Showing</span><select id="langSelect"></select></label>
       <div class="cell">
-        <div class="pop-title">Translate headlines</div>
+        <div class="pop-title">Translate headlines <span class="pro-tag">Pro</span></div>
+        <div id="langChecks" class="lang-checks" role="group" aria-label="Languages to translate into"></div>
         <div class="inline">
-          <select id="translateTarget"></select>
-          <button id="translateBtn" class="btn small">Translate</button>
+          <span id="translateCount" class="muted">Pick languages</span>
+          <button id="translateBtn" class="btn primary small" disabled>Translate</button>
         </div>
         <p id="translateStatus" class="hint"></p>
       </div>
@@ -130,12 +131,15 @@
   <div id="licensePop" class="pop pop-down" popover>
     <div class="card">
       <div class="cell">
-        <div class="pop-title">License</div>
+        <div class="pop-title">Duo Screenshot Studio Pro</div>
+        <p class="hint pro-pitch">One-time purchase. No watermark, AI translation of your headlines into 39 languages, and future updates.</p>
+        <a id="buyBtn" class="btn primary buy" href="#" target="_blank" rel="noopener">Get Pro · <span id="proPrice"></span></a>
+        <div class="pop-title small">Already bought it?</div>
         <div class="inline">
-          <input id="licenseKey" type="text" placeholder="License key" autocomplete="off" spellcheck="false">
+          <input id="licenseKey" type="text" placeholder="License key from your email" autocomplete="off" spellcheck="false">
           <button id="licenseBtn" class="btn small">Unlock</button>
         </div>
-        <p id="licenseStatus" class="hint">Free exports include a small watermark. <a id="buyLink" href="#">Get a license</a>: €19 per app or €49 lifetime.</p>
+        <p id="licenseStatus" class="hint"></p>
       </div>
     </div>
   </div>

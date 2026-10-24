@@ -1,11 +1,11 @@
 /* global Konva, JSZip */
-import { DUO_SIZES, LICENSE, WATERMARK_TEXT, LANGUAGES } from './config.js';
+import { DUO_SIZES, PRO, WATERMARK_TEXT, LANGUAGES } from './config.js';
 import { DEVICE_COLORS, loadFrames, getFrame } from './frames.js';
 import { TEMPLATES, LAYOUTS, FONTS, templateById } from './templates.js';
 import { buildComposition } from './render.js';
 import { canvasToRgbPng } from './png.js';
-import { checkLicense, storedLicenseKey, storeLicenseKey } from './license.js';
-import { translateTexts, translateConfigured } from './translate.js';
+import { checkLicense, storedLicenseKey } from './license.js';
+import { translateTexts } from './translate.js';
 import { makeSampleScreenshot, SAMPLE_SHOTS } from './sample.js';
 
 const $ = (id) => document.getElementById(id);
@@ -192,7 +192,7 @@ function renderLangSelect() {
     sel.appendChild(o);
   }
   sel.value = state.activeLang;
-  $('langLabel').textContent = LANGUAGES.find(l => l[0] === state.activeLang)?.[1] || state.activeLang;
+  $('langLabel').textContent = langName(state.activeLang);
 }
 
 // ---------- Preview ----------
@@ -473,48 +473,100 @@ function setupDevice(colors) {
   syncDeviceInputs();
 }
 
-// ---------- Translate ----------
+// ---------- Translate (Pro) ----------
+const langName = (code) => LANGUAGES.find(l => l[0] === code)?.[1] || code;
+
+function renderLangChecks() {
+  const box = $('langChecks');
+  box.innerHTML = '';
+  for (const [code, name] of LANGUAGES) {
+    if (code === state.baseLang) continue;
+    const l = document.createElement('label');
+    l.className = 'lang-check' + (state.langs.includes(code) ? ' done' : '');
+    l.innerHTML = '<input type="checkbox"><span></span>';
+    l.querySelector('input').value = code;
+    l.querySelector('span').textContent = name;
+    box.appendChild(l);
+  }
+  syncTranslateButton();
+}
+
+function selectedTargets() {
+  return [...$('langChecks').querySelectorAll('input:checked')].map(i => i.value);
+}
+
+function syncTranslateButton() {
+  const n = selectedTargets().length;
+  $('translateCount').textContent = n ? `${n} language${n > 1 ? 's' : ''}` : 'Pick languages';
+  $('translateBtn').disabled = !n;
+  $('translateBtn').textContent = state.licensed ? 'Translate' : 'Get Pro to translate';
+}
+
 function setupTranslate() {
-  const sel = $('translateTarget');
-  for (const [code, name] of LANGUAGES) if (code !== state.baseLang) sel.add(new Option(name, code));
-  if (!translateConfigured()) $('translateStatus').textContent = 'Translation endpoint not configured (TRANSLATE_ENDPOINT in src/config.js).';
+  renderLangChecks();
+  $('langChecks').onchange = syncTranslateButton;
   $('translateBtn').onclick = async () => {
+    if (!state.licensed) { $('langPop').hidePopover(); $('licensePop').showPopover(); return; }
     if (!state.shots.length) return toast('Add screenshots first.');
-    const target = sel.value;
+    const targets = selectedTargets();
+    if (targets.length > 12) { $('translateStatus').textContent = 'Pick up to 12 languages at a time.'; return; }
     const texts = state.shots.flatMap(s => { const t = textFor(s, state.baseLang); return [t.headline, t.subheadline]; });
-    $('translateStatus').textContent = 'Translating…';
+    $('translateBtn').disabled = true;
+    $('translateStatus').textContent = `Translating into ${targets.length} language${targets.length > 1 ? 's' : ''}…`;
     try {
-      const out = await translateTexts(texts, target, state.baseLang);
-      state.shots.forEach((s, i) => { s.text[target] = { headline: out[i * 2], subheadline: out[i * 2 + 1] }; });
-      if (!state.langs.includes(target)) state.langs.push(target);
-      state.activeLang = target;
+      const { translations, failed, usage } = await translateTexts(texts, targets, state.baseLang, storedLicenseKey());
+      for (const [lang, out] of Object.entries(translations)) {
+        state.shots.forEach((s, i) => { s.text[lang] = { headline: out[i * 2], subheadline: out[i * 2 + 1] }; });
+        if (!state.langs.includes(lang)) state.langs.push(lang);
+      }
+      const added = Object.keys(translations);
+      if (added.length) state.activeLang = added[0];
       renderLangSelect();
+      renderLangChecks();
       refresh();
-      $('translateStatus').textContent = `Added ${sel.selectedOptions[0].text}. Review the text — exports include every language.`;
+      const left = usage ? ` ${usage.limit - usage.runs} of ${usage.limit} left this month.` : '';
+      $('translateStatus').textContent = (added.length ? `Added ${added.map(langName).join(', ')}. Review the text: exports include every language.` : '')
+        + (failed.length ? ` Couldn't translate ${failed.map(langName).join(', ')}; try again.` : '') + left;
     } catch (e) {
       $('translateStatus').textContent = e.message;
+    } finally {
+      syncTranslateButton();
     }
   };
 }
 
-// ---------- License ----------
+// ---------- License (Pro) ----------
 function applyLicense(valid, message) {
   state.licensed = valid;
-  $('licenseBadge').textContent = valid ? 'Pro · no watermark' : 'Free · watermark';
+  $('licenseBadge').textContent = valid ? 'Pro' : 'Free · watermark';
   $('licenseBadge').classList.toggle('pro', valid);
   if (message) $('licenseStatus').textContent = message;
+  syncTranslateButton();
   renderPreview();
 }
+
 function setupLicense() {
-  $('buyLink').href = LICENSE.buyUrl;
+  $('proPrice').textContent = PRO.price;
+  const buy = $('buyBtn');
+  if (PRO.checkoutUrl) buy.href = PRO.checkoutUrl;
+  else { buy.removeAttribute('href'); buy.classList.add('disabled'); buy.title = 'Checkout is not set up yet'; }
   const saved = storedLicenseKey();
-  if (saved) { $('licenseKey').value = saved; checkLicense(saved).then(r => applyLicense(r.valid, r.valid ? r.message : null)); }
+  if (saved) { $('licenseKey').value = saved; checkLicense(saved).then(r => applyLicense(r.valid, r.message)); }
   $('licenseBtn').onclick = async () => {
-    const key = $('licenseKey').value;
-    const r = await checkLicense(key);
-    storeLicenseKey(r.valid ? key.trim() : '');
+    $('licenseBtn').disabled = true;
+    $('licenseStatus').textContent = 'Checking…';
+    const r = await checkLicense($('licenseKey').value);
+    $('licenseBtn').disabled = false;
     applyLicense(r.valid, r.message);
   };
+  $('licenseKey').onkeydown = (e) => { if (e.key === 'Enter') $('licenseBtn').click(); };
+  // Back from Polar checkout: open the license popover ready for the key.
+  const params = new URLSearchParams(location.search);
+  if (params.get('checkout') === 'success') {
+    history.replaceState(null, '', location.pathname);
+    $('licenseStatus').textContent = 'Thanks for buying Pro! Paste the license key from your receipt email.';
+    requestAnimationFrame(() => { $('licensePop').showPopover(); $('licenseKey').focus(); });
+  }
 }
 
 // ---------- Export ----------

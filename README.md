@@ -4,7 +4,8 @@ Turn your existing App Store screenshots into **App Store-ready iPhone Duo scree
 **inner (unfolded) display** and one for the **outer (cover) display**, with marketing headlines, in a few minutes.
 
 Everything runs in the browser. Screenshots are never uploaded: they're read with `URL.createObjectURL`,
-drawn on a canvas and zipped locally. The only network call is the optional headline translation, which sends **text only**.
+drawn on a canvas and zipped locally. The only network calls are the Pro license check and the optional headline
+translation, which sends **text only**.
 
 ![Editor](docs/editor.png)
 
@@ -21,8 +22,8 @@ drawn on a canvas and zipped locally. The only network call is the optional head
 - An optional separate image for the outer display, for example a real cover-screen capture.
 - **Export ZIP** with every screenshot × both displays × every language, at Apple's exact pixel sizes.
   The PNGs are **8-bit RGB with no alpha channel**, because App Store Connect rejects transparency. A tiny PNG encoder in `src/png.js` handles this, since `canvas.toBlob` always writes RGBA.
-- **Translate headlines:** calls a configurable endpoint and adds each language as its own folder in the ZIP. A Supabase edge function stub using Claude is included.
-- **Free mode** adds a small "Made with Duo Screenshot Studio" watermark. A license key field removes it. Lemon Squeezy validation is stubbed; see below.
+- **Translate headlines (Pro):** pick any of 39 App Store languages and translate every headline at once with Claude. Each language becomes its own folder in the ZIP.
+- **Free vs Pro:** free exports carry a small "Made with Duo Screenshot Studio" watermark. **Pro** (€15.99 one-time, sold on Polar) removes it and unlocks translation.
 
 ## iPhone Duo screenshot sizes ✅ verified
 
@@ -54,88 +55,112 @@ All sizes live in one constant: `DUO_SIZES` in `src/config.js`. Each display can
 
 ## Run locally
 
-No build step. Any static server works; ES modules just need http:// rather than file://.
+The editor itself needs no build. Any static server works; ES modules just need http:// rather than file://.
 
 ```bash
-cd duo-screenshot-studio
 python3 -m http.server 8000
 # open http://localhost:8000
 ```
 
-Konva 9.3.22, JSZip 3.10.2 and the fonts are vendored in `vendor/`, so the app works offline.
+Konva 9.3.22, JSZip 3.10.2 and the fonts are vendored in `vendor/`, so the app works offline. Without the server
+functions (below), the license check and translation say they're not available.
+
+To run the full app with the server functions and a local D1 database, use Wrangler:
+
+```bash
+npm install
+npm run build
+npx wrangler d1 execute duo-studio --local --file=schema.sql
+npx wrangler pages dev _site --d1 DB=duo-studio   # put secrets in .dev.vars (gitignored)
+```
+
+## Build
+
+`npm run build` writes the deployable site to `_site/`: index.html, the stylesheet, `vendor/`, `samples/`, and
+`src/app.js` bundled and minified into one file. It stamps `?v=<commit>` on the asset links so browsers never mix old
+and new files. Tests, docs and the server code are not published.
 
 ## Test
 
-There's a headless end-to-end test. It serves the app, uploads two screenshots through the real file input, edits text,
-switches through all templates, translates against a mocked endpoint, and exports free and unlocked. It then checks every PNG in
-the ZIP for exact dimensions and an RGB/no-alpha color type, and confirms the watermark goes away after unlocking.
-
 ```bash
-cd tests
 npm install
-npx playwright install chromium   # add --with-deps on a fresh Linux box
-node e2e.mjs
+npm run test:functions        # server functions: Polar and Anthropic faked, D1 emulated with node:sqlite
+
+cd tests && npm install && npx playwright install chromium && node e2e.mjs   # the app in a real browser
 ```
 
-The test regenerates `docs/editor.png`, `docs/sample-export.png` and `docs/sample-export-outer-free.png`.
+The browser test uploads screenshots, edits text inline, switches every theme and layout, checks that translation is
+Pro-only, unlocks with a (faked) license, translates into two languages, and exports free, Pro and landscape ZIPs. It
+checks every PNG for Apple's exact size and an RGB/no-alpha color type, and that the watermark goes away after
+unlocking. It regenerates `docs/editor.png`, `docs/sample-export.png` and `docs/sample-export-outer-free.png`.
 
-## Translation endpoint (Supabase + Claude)
+## Pro licenses (Polar) and translation (Claude)
 
-`supabase/functions/translate/index.ts` is a Deno edge function that calls the Anthropic Messages API
-(`POST https://api.anthropic.com/v1/messages`, `anthropic-version: 2023-06-01`) with `ANTHROPIC_API_KEY` from the environment.
-**It is not deployed.** To deploy it:
+Polar is the merchant of record: it sells Pro (€15.99 one-time, VAT included), handles VAT and receipts, and emails the
+buyer a license key. The app never talks to Polar or Anthropic directly; two Cloudflare Pages Functions do:
 
-```bash
-supabase secrets set ANTHROPIC_API_KEY=sk-ant-...      # never commit this
-supabase secrets set ANTHROPIC_MODEL=<current model id> # optional, defaults to claude-sonnet-4-5
-supabase functions deploy translate
-```
+- **`POST /api/license`** `{ key, device }`: activates the browser as a device on the key (Polar enforces the
+  limit of 3), validates it, and caches a good result in D1 for a day. Keys are stored only as SHA-256 hashes.
+- **`POST /api/translate`** `{ key, device, sourceLanguage, targetLanguages[], texts[] }`: checks the license, then
+  the monthly allowance (one run = all texts into one language), then calls Claude once per language with
+  structured JSON output and server-side refusal fallback. Only the text is sent, never images or the key.
 
-Then set `TRANSLATE_ENDPOINT` (and the **anon** key in `TRANSLATE_HEADERS`) in `src/config.js`.
-The contract is `POST { texts: string[], targetLanguage, sourceLanguage }` → `{ translations: string[] }`.
+Both accept calls only from the app's own origin and are rate-limited per IP.
 
-## Licensing (Lemon Squeezy) — stub
+**Cloudflare setup** (Pages project connected to this repo):
 
-`src/license.js` → `checkLicense(key)`:
-- For now, only the dev key `DUO-DEV-UNLOCK` (set in `LICENSE.devKey` in `src/config.js`) unlocks. **Change or remove it before launch.**
-- Real validation is already written behind `LICENSE.lemonSqueezyEnabled`. It uses Lemon Squeezy's public License API, which needs no secret key:
+| Setting | Value |
+|---|---|
+| Build command | `npm ci && npm run build` |
+| Build output directory | `_site` |
+| Custom domain | `studio.hearhere.media` |
+| D1 binding | `DB` → a D1 database (e.g. `duo-studio`) with `schema.sql` applied |
+| Variable `POLAR_ORGANIZATION_ID` | your Polar organization ID |
+| Variable `POLAR_BENEFIT_ID` | optional: only keys from this benefit unlock |
+| Variable `ALLOWED_ORIGIN` | `https://studio.hearhere.media` |
+| Variable `TRANSLATION_RUNS_PER_MONTH` | optional, default `100` |
+| Variable `ANTHROPIC_MODEL` | optional, default `claude-opus-5-5` |
+| Secret `POLAR_ACCESS_TOKEN` | Polar organization token with `license_keys:read` and `license_keys:write` |
+| Secret `ANTHROPIC_API_KEY` | Anthropic API key (use a separate workspace with a spend limit) |
 
-```bash
-curl -X POST https://api.lemonsqueezy.com/v1/licenses/validate \
-  -H "Accept: application/json" \
-  -d "license_key=<key>"          # optional: -d "instance_id=<id>"
-```
+**Polar setup:** a one-time product "Duo Screenshot Studio Pro" at €15.99 with a License Keys benefit (prefix `DUO`,
+no expiry, 3 activations, visible to the customer). Put its checkout link in `PRO.checkoutUrl` in `src/config.js`
+and set the checkout success URL to `https://studio.hearhere.media/?checkout=success`, which opens the license
+popover for the key.
 
-  The response is `{ valid, error, license_key: { status, activation_limit, ... }, instance, meta: { store_id, product_id, product_name, ... } }`.
-  Check `valid` and that `meta.store_id` and `meta.product_id` match your products. Docs: https://docs.lemonsqueezy.com/api/license-api/validate-license-key
-  Related endpoints: `POST /v1/licenses/activate` (`license_key`, `instance_name`) and `POST /v1/licenses/deactivate`.
+The watermark is drawn in the browser, so a determined user could remove it by changing the code; the minified bundle
+just makes that inconvenient. Translation is the part that can't be bypassed, because it runs on the server.
 
 ## TODO
 
-- [ ] Lemon Squeezy: create products (€19 per app, €49 lifetime), fill in `storeId`, `productIds` and `buyUrl`, flip `lemonSqueezyEnabled`, and remove the dev key.
-      Verify that the License API allows browser CORS; if it doesn't, proxy it through a Supabase function. Optionally activate per device.
-- [ ] Deploy the translate function, lock `ALLOWED_ORIGIN`, and add rate limiting or license gating so it can't be abused.
-- [ ] Landscape layouts. The sizes are already in `DUO_SIZES`.
+- [ ] Polar: product, License Keys benefit, checkout link (`PRO.checkoutUrl`), access token, organization ID.
+- [ ] Cloudflare Pages project, D1 database, variables and secrets (table above), domain `studio.hearhere.media`; then retire the GitHub Pages workflow.
+- [ ] Privacy notice, terms and imprint pages.
+- [ ] Check that Apple's device frame images may be shipped inside the tool; replace the sample screenshots with neutral artwork.
 - [ ] Persist projects with IndexedDB; for now, reloading the page loses work.
-- [ ] Per-screenshot template overrides, drag-to-reorder, and moving or scaling the device by hand.
-- [ ] Fonts for CJK. Vendored fonts cover Latin and Latin Extended; Japanese, Korean and Chinese fall back to system fonts.
-- [ ] A JPEG export option for smaller files. PNGs use an Up filter and are around 1–3 MB each.
-- [ ] Landing page and SEO page ("iPhone Duo screenshot sizes") that links to the Duo-ready sprint service.
 - [ ] Test in Safari and Firefox. The automated test only covers Chromium.
+- [ ] Per-screenshot layout and theme overrides.
+- [ ] Star White frames; fonts for Greek, Cyrillic, Arabic, Hebrew, Thai and CJK (they fall back to system fonts).
+- [ ] A JPEG export option for smaller files. PNGs are around 1–3 MB each.
+- [ ] More devices: iPhone, iPad, Mac and Apple Watch, using a device list instead of the fixed inner/outer pair.
 
 ## Project layout
 
 ```
 index.html               app shell
-src/config.js            DUO_SIZES, endpoints, license config
-src/templates.js         5 templates + fonts
+src/config.js            DUO_SIZES, API endpoints, Pro price and checkout link, languages
+src/templates.js         themes, layouts and fonts
+src/frames.js            device frames and their measured screen openings
 src/render.js            Konva layout for one screenshot on one display
 src/png.js               RGB (no-alpha) PNG encoder
-src/app.js               state, UI, export
-src/license.js           license check (Lemon Squeezy stub)
-src/translate.js         translate client
-src/sample.js            generates the sample screenshot
-supabase/functions/translate/index.ts   Claude translation edge function (not deployed)
-tests/e2e.mjs            Playwright end-to-end test
-vendor/                  Konva, JSZip, fonts (+ licenses)
+src/app.js               state, UI, inline editing, export
+src/license.js           Pro license check (calls /api/license)
+src/translate.js         translation client (calls /api/translate)
+src/sample.js            sample screenshots (real captures in samples/, generated fallback)
+functions/api/           Cloudflare Pages Functions: license.js, translate.js
+functions/_lib/          Polar license logic, HTTP helpers, language list
+schema.sql               D1 tables
+scripts/build.mjs        builds _site/
+tests/                   e2e.mjs (browser), functions.test.mjs (server)
+vendor/                  Konva, JSZip, fonts, device frames (+ licenses)
 ```
