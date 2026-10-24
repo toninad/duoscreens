@@ -416,6 +416,15 @@ function groupHead(group, device) {
     sw.appendChild(b);
   }
   tools.appendChild(sw);
+  // iPhone: which frame (they all export the 6.9″ size), as a small dropdown.
+  const models = DEVICES.filter(d => d.family === device.family && state.available[d.id]?.length);
+  if (models.length > 1) {
+    const sel = el('select', 'group-select model-select');
+    sel.setAttribute('aria-label', 'iPhone frame');
+    for (const m of models) sel.add(new Option(m.short, m.id, false, m.id === device.id));
+    sel.onchange = () => switchModel(group, sel.value);
+    tools.appendChild(sel);
+  }
   const change = el('button', 'group-btn', 'Change device');
   change.type = 'button';
   change.onclick = () => openDeviceDialog({ replace: group.id });
@@ -515,6 +524,17 @@ function deleteShot(id) {
   state.selection.delete(id);
   refresh();
 }
+/** Another frame for the same kind of device; screens, texts and orientation stay. */
+async function switchModel(group, id) {
+  await loadFrame(id, state.colors[id]);
+  const from = targetsOfDevice(group.device), to = targetsOfDevice(id);
+  for (const s of group.shots) s.target = to[from.findIndex(t => t.id === targetOf(s).id)]?.id || to[0].id;
+  group.device = id;
+  state.models[deviceById(id).family] = id;
+  saveDevicePrefs();
+  refresh();
+}
+
 function removeGroup(id) {
   if (state.groups.length < 2) return;
   const g = state.groups.find(x => x.id === id);
@@ -903,22 +923,6 @@ function renderDeviceList() {
     pick.querySelector('.tile-note').textContent = fam.soon ? fam.note : !free.length ? 'Already on the board' : fam.note;
     pick.onclick = () => { picker.family = fam.id; picker.model = (free.find(m => m.id === state.models[fam.id]) || free[0]).id; renderDeviceList(); };
     tile.appendChild(pick);
-    if (on && models.length > 1) {
-      const chips = el('div', 'model-chips');
-      chips.setAttribute('role', 'radiogroup');
-      chips.setAttribute('aria-label', 'Model');
-      for (const m of models) {
-        const b = el('button');
-        b.type = 'button'; b.dataset.model = m.id; b.textContent = m.short;
-        b.setAttribute('role', 'radio');
-        b.setAttribute('aria-checked', String(m.id === picker.model));
-        b.disabled = usedElsewhere(m.id);
-        b.title = b.disabled ? `${m.name} is already on the board` : `${m.name} · ${m.note}`;
-        b.onclick = () => { picker.model = m.id; renderDeviceList(); };
-        chips.appendChild(b);
-      }
-      tile.appendChild(chips);
-    }
     list.appendChild(tile);
   }
   const d = deviceById(picker.model);

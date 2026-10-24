@@ -85,7 +85,7 @@ try {
   await page.waitForSelector('#deviceDialog[open]');
   check(true, 'First launch opens the device picker');
   await page.click('.tile[data-family="iphone"] .tile-select');
-  check(await page.getAttribute('[data-model="iphone-18-pro-max"]', 'aria-checked') === 'true', 'Picking iPhone shows its models');
+  check(!(await page.$('.model-chips')), 'The sheet only picks the device; no model switch');
   await page.click('.tile[data-family="duo"] .tile-select');
   check(await page.getAttribute('.tile[data-family="duo"] .tile-select', 'aria-checked') === 'true', 'One device is picked at a time');
   await page.click('#deviceDone');
@@ -219,13 +219,13 @@ try {
   await page.click('.add-group');
   check(!(await page.$('.tile[data-family="duo"] .tile-select:not([disabled])')), 'A device already on the board can\'t be added twice');
   await page.click('.tile[data-family="iphone"] .tile-select');
-  await page.waitForSelector('[data-model="iphone-18-pro-max"]');
-  check(await page.getAttribute('[data-model="iphone-18-pro-max"]', 'aria-checked') === 'true', 'iPhone starts on the 18 Pro Max');
-  await page.click('[data-model="iphone-air"]');
   await page.screenshot({ path: path.join(out, 'device-picker.png') });
   await page.click('#deviceDone');
+  await page.waitForFunction(() => window.__dss.state.devices.join() === 'duo,iphone-18-pro-max');
+  check(true, 'Add device makes a second group, an iPhone (18 Pro Max frame to start)');
+  await page.selectOption('.group[data-device="iphone-18-pro-max"] .model-select', 'iphone-air');
   await page.waitForFunction(() => window.__dss.state.devices.join() === 'duo,iphone-air');
-  check(true, 'Add device makes a second group, for the iPhone Air');
+  check(true, 'The iPhone frame is switched on the board, in the group header');
   await page.click('.swatches[data-device="iphone-air"] [data-color="sky-blue"]');
   await page.waitForFunction(() => window.__dss.state.colors['iphone-air'] === 'sky-blue');
   check(true, 'The finish is picked on the board, in the group header');
