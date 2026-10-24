@@ -11,7 +11,7 @@ import { onRequestPost as translate } from '../functions/api/translate.js';
 // --- D1 stand-in: the subset of the D1 API the functions use -------------------------------------
 function fakeD1() {
   const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(new URL('../schema.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0001_init.sql', import.meta.url), 'utf8'));
   return {
     raw: db,
     prepare(sql) {

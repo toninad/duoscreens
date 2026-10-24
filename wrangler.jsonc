@@ -1,0 +1,27 @@
+// Cloudflare Worker config for studio.hearhere.media.
+// Deploy: `npm run deploy` (Cloudflare Workers Builds runs it on every push to main).
+// Secrets are set in the dashboard (Worker > Settings > Variables and Secrets), never here:
+//   POLAR_ACCESS_TOKEN, ANTHROPIC_API_KEY
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "studio",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./_site",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  // Created automatically on the first deploy; tables come from migrations/.
+  "d1_databases": [
+    { "binding": "DB", "database_name": "studio", "migrations_dir": "migrations" }
+  ],
+  "vars": {
+    "ALLOWED_ORIGIN": "https://studio.hearhere.media",
+    "POLAR_ORGANIZATION_ID": "",
+    "POLAR_BENEFIT_ID": "",
+    "TRANSLATION_RUNS_PER_MONTH": "100"
+  },
+  "observability": { "enabled": true }
+}

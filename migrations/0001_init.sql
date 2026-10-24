@@ -1,6 +1,5 @@
--- D1 schema for Duo Screenshot Studio. Run once in the Cloudflare dashboard (D1 > your database > Console)
--- or with: npx wrangler d1 execute duo-studio --remote --file=schema.sql
--- License keys are stored only as SHA-256 hashes.
+-- D1 schema for the studio Worker. Applied automatically on deploy (npm run deploy runs
+-- wrangler d1 migrations apply). License keys are stored only as SHA-256 hashes.
 
 CREATE TABLE IF NOT EXISTS licenses (
   key_hash   TEXT PRIMARY KEY,

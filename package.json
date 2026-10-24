@@ -4,12 +4,15 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test:functions": "node --test tests/functions.test.mjs"
+    "test:functions": "node --test tests/functions.test.mjs",
+    "deploy": "wrangler deploy && wrangler d1 migrations apply DB --remote",
+    "dev": "npm run build && wrangler d1 migrations apply DB --local && wrangler dev"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "wrangler": "^4.152.0"
   }
 }
