@@ -10,7 +10,7 @@ import { makeSampleScreenshot, SAMPLE_SHOTS } from './sample.js';
 
 const $ = (id) => document.getElementById(id);
 const svg = (d) => `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${d}"/></svg>`;
-const ICONS = { left: svg('M10 4l-4 4 4 4'), right: svg('M6 4l4 4-4 4'), del: svg('M5 5l6 6M11 5l-6 6') };
+const ICONS = { del: svg('M5 5l6 6M11 5l-6 6') };
 const DISPLAYS = ['inner', 'outer'];
 const sizeOf = (d) => DUO_SIZES[d][state.pose[d]];
 
@@ -100,18 +100,67 @@ function renderShotList() {
     const li = document.createElement('li');
     li.className = i === state.selected ? 'active' : '';
     li.title = `${i + 1}. ${textFor(s).headline || s.name}`;
-    li.innerHTML = `<img alt=""><span class="num">${i + 1}</span>
-      <div class="tools"><button data-a="up" title="Move left" aria-label="Move left">${ICONS.left}</button><button data-a="del" title="Remove" aria-label="Remove">${ICONS.del}</button><button data-a="down" title="Move right" aria-label="Move right">${ICONS.right}</button></div>`;
-    li.querySelector('img').src = s.image.src;
+    li.tabIndex = 0;
+    li.draggable = true;
+    li.innerHTML = `<img alt=""><button class="del" data-a="del" title="Remove" aria-label="Remove screenshot ${i + 1}">${ICONS.del}</button>`;
+    li.querySelector('img').src = s.thumb || s.image.src;
     li.onclick = (e) => {
-      const a = e.target.closest('button')?.dataset.a;
-      if (a === 'del') { state.shots.splice(i, 1); state.selected = Math.min(state.selected, state.shots.length - 1); }
-      else if (a === 'up' && i > 0) { [state.shots[i - 1], state.shots[i]] = [state.shots[i], state.shots[i - 1]]; state.selected = i - 1; }
-      else if (a === 'down' && i < state.shots.length - 1) { [state.shots[i + 1], state.shots[i]] = [state.shots[i], state.shots[i + 1]]; state.selected = i + 1; }
+      if (e.target.closest('button')?.dataset.a === 'del') { state.shots.splice(i, 1); state.selected = Math.min(state.selected, state.shots.length - 1); }
       else state.selected = i;
       refresh();
     };
+    // Reorder by dragging, or with Alt + arrow keys.
+    li.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); state.selected = i; refresh(); }
+      if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); moveShot(i, i + (e.key === 'ArrowLeft' ? -1 : 1)); }
+    };
+    li.ondragstart = (e) => { e.dataTransfer.setData('text/x-shot', String(i)); e.dataTransfer.effectAllowed = 'move'; li.classList.add('dragging'); };
+    li.ondragend = () => li.classList.remove('dragging');
+    li.ondragover = (e) => { if (e.dataTransfer.types.includes('text/x-shot')) { e.preventDefault(); e.stopPropagation(); } };
+    li.ondrop = (e) => {
+      const from = e.dataTransfer.getData('text/x-shot');
+      if (from === '') return;
+      e.preventDefault(); e.stopPropagation();
+      moveShot(+from, i);
+    };
     list.appendChild(li);
+  });
+  requestAnimationFrame(placeIndicator);
+}
+
+function moveShot(from, to) {
+  if (to < 0 || to >= state.shots.length || from === to) return;
+  const [shot] = state.shots.splice(from, 1);
+  state.shots.splice(to, 0, shot);
+  state.selected = to;
+  refresh();
+  $('shotList').children[to]?.focus();
+}
+
+// Strip thumbnails are the real composition of the inner display, re-rendered shortly after edits.
+let thumbStage, thumbTimer;
+function scheduleThumbs() {
+  clearTimeout(thumbTimer);
+  thumbTimer = setTimeout(renderThumbs, 150);
+}
+function renderThumbs() {
+  const size = sizeOf('inner');
+  const h = 104, k = h / size.height, w = Math.round(size.width * k);   // 52px tall at 2x
+  if (!thumbStage) {
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-99999px;top:0;';
+    document.body.appendChild(host);
+    thumbStage = new Konva.Stage({ container: host, width: w, height: h });
+    thumbStage.add(new Konva.Layer({ listening: false }));
+  }
+  const layer = thumbStage.getLayers()[0];
+  thumbStage.size({ width: w, height: h });
+  layer.scale({ x: k, y: k });
+  const imgs = $('shotList').querySelectorAll('img');
+  state.shots.forEach((shot, i) => {
+    buildComposition(layer, size, { ...compositionProps(shot, 'inner'), watermark: false });
+    shot.thumb = thumbStage.toDataURL({ pixelRatio: 1 });
+    if (imgs[i]) imgs[i].src = shot.thumb;
   });
   requestAnimationFrame(placeIndicator);
 }
@@ -202,6 +251,7 @@ function renderPreview() {
     placeTextHits(d, nodes, s);
   }
   if (editing) positionEditor();
+  scheduleThumbs();
 }
 
 // ---------- Inline text editing ----------
@@ -351,7 +401,7 @@ function setupDropzone() {
   for (const target of [dz, document.querySelector('.stage-wrap')]) {
     target.addEventListener('dragover', over(true));
     target.addEventListener('dragleave', over(false));
-    target.addEventListener('drop', (e) => { over(false)(e); addFiles(e.dataTransfer.files); });
+    target.addEventListener('drop', (e) => { over(false)(e); if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
   }
   const addSample = async () => {
     const shots = await loadSampleShots();
