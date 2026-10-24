@@ -40,7 +40,7 @@ async function exportZip(page, label) {
 // Select a card by clicking its frame near the bottom-left corner (the top edge holds the card tools).
 async function selectCard(page, frameSel) {
   const box = await page.locator(frameSel).first().boundingBox();
-  await page.locator(frameSel).first().click({ position: { x: 6, y: box.height - 6 } });
+  await page.locator(frameSel).first().click({ position: { x: 6, y: 6 } });   // top corner: clear of text and any toolbar
 }
 
 const dimsOf = {};   // PNG name -> "WxH", filled by verifyZip

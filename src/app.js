@@ -278,16 +278,14 @@ function buildStructure() {
       group.shots.forEach((shot, i) => {
         const card = el('article', 'shot-card');
         card.dataset.id = shot.id;
-        // Quiet by default: just the frame and one caption line. Tools appear on hover or selection.
+        // Quiet by default: just the frame and one caption line. Selecting a card swaps the caption for
+        // one small toolbar: its display and orientation, then move, duplicate and remove.
         card.innerHTML = '<div class="card-frames"></div>';
-        // On the frame's top edge: duplicate (left corner), move left/right (middle), remove (right corner).
-        const tools = el('div', 'card-tools', `
-            <button type="button" class="card-btn dup" data-a="dup" title="Duplicate as a variation" aria-label="Duplicate" ${countOn(group, targetOf(shot).id) >= MAX_SHOTS ? 'disabled' : ''}>${ICON.dup}</button>
-            <span class="card-move">
-              <button type="button" data-a="left" title="Move left" aria-label="Move left" ${i === 0 ? 'disabled' : ''}>${ICON.left}</button>
-              <button type="button" data-a="right" title="Move right" aria-label="Move right" ${i === group.shots.length - 1 ? 'disabled' : ''}>${ICON.right}</button>
-            </span>
-            <button type="button" class="card-btn del" data-a="del" title="Remove" aria-label="Remove">${ICON.del}</button>`);
+        const tools = el('div', 'card-acts', `
+            <button type="button" data-a="left" title="Move left" aria-label="Move left" ${i === 0 ? 'disabled' : ''}>${ICON.left}</button>
+            <button type="button" data-a="right" title="Move right" aria-label="Move right" ${i === group.shots.length - 1 ? 'disabled' : ''}>${ICON.right}</button>
+            <button type="button" data-a="dup" title="Duplicate as a variation" aria-label="Duplicate" ${countOn(group, targetOf(shot).id) >= MAX_SHOTS ? 'disabled' : ''}>${ICON.dup}</button>
+            <button type="button" class="del" data-a="del" title="Remove" aria-label="Remove">${ICON.del}</button>`);
         tools.onclick = (e) => {
           const a = e.target.closest('button')?.dataset.a;
           if (a === 'dup') duplicateShot(shot.id);
@@ -295,8 +293,7 @@ function buildStructure() {
           else if (a === 'right') moveShot(shot.id, 1);
           else if (a === 'del') deleteShot(shot.id);
         };
-        // Which display and orientation this card is: a small pill on the frame's top edge, shown when
-        // the card is selected (the Duo has two displays; iPhones are always portrait).
+        // Which display and orientation this card is (the Duo has two displays; iPhones are always portrait).
         const poseBox = el('div', 'card-pose-pill');
         for (const t of targets) {
           const poses = t.display.poses || ['portrait', 'landscape'];
@@ -336,13 +333,12 @@ function buildStructure() {
           wrap.appendChild(fr);
           const cap = el('figcaption', 'frame-cap', `<span class="card-num">${pad2(i + 1)}</span><span class="cap-text"></span><span class="card-tag"></span>`);
           if (lang === state.baseLang) cap.querySelector('.cap-text').textContent = `${t.display.label ? t.display.label + ' · ' : ''}${size.width} × ${size.height}`;
-          wrap.append(cap, tools);
-          if (poseBox.childElementCount) {   // floats over the space under the frame, on hover or selection
-            const pose = el('div', 'card-pose');
-            pose.appendChild(poseBox);
-            wrap.style.setProperty('--fh', fr.style.height);
-            wrap.appendChild(pose);
-          }
+          wrap.append(cap);
+          poseBox.appendChild(tools);
+          const pose = el('div', 'card-pose');   // floats where the caption is, only while selected
+          pose.appendChild(poseBox);
+          wrap.style.setProperty('--fh', fr.style.height);
+          wrap.appendChild(pose);
           framesEl.appendChild(wrap);
           const stage = new Konva.Stage({ container: fr.firstChild, width: Math.round(size.width * K), height: Math.round(size.height * K) });
           const layer = new Konva.Layer({ listening: false });
@@ -669,7 +665,7 @@ function setupBoard() {
   const pointers = new Map();
   let drag = null, pinch = null;
   board.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.text-hit, .screen-add, .add-screen, .add-group, .group-head, .card-tools, .card-pose, .row-remove, .inline-editor')) return;
+    if (e.target.closest('.text-hit, .screen-add, .add-screen, .add-group, .group-head, .card-pose, .row-remove, .inline-editor')) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     board.setPointerCapture(e.pointerId);
     if (pointers.size === 2) {

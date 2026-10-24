@@ -790,3 +790,22 @@ body { display: block; height: 100dvh; }
   .zoom-tools { top: auto; bottom: calc(76px + env(safe-area-inset-bottom)); }
   .group-tools, .group .group-tools { opacity: 1; }
 }
+
+/* One contextual toolbar per card, only while it's selected: hover shows nothing but the frame. */
+.group .card-pose { top: calc(var(--fh) + 8px); transform: translateY(-3px); }
+.group .shot-card:hover .card-pose { opacity: 0; transform: translateY(-3px); }
+.group .shot-card:hover .card-pose-pill { pointer-events: none; }
+.group .shot-card.selected .card-pose { opacity: 1; transform: none; }
+.group .shot-card.selected .card-pose-pill { pointer-events: auto; }
+.group .shot-card.selected .frame-cap { visibility: hidden; }
+.card-acts { display: flex; gap: 2px; }
+.card-pose .segmented + .card-acts { padding-left: 3px; margin-left: 1px; border-left: 1px solid var(--hairline); }
+.card-acts button {
+  width: 28px; height: 26px; border: 0; padding: 0; border-radius: 999px; display: grid; place-items: center;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.card-acts button:hover:not(:disabled) { background: var(--fill); color: var(--ink); }
+.card-acts button.del:hover:not(:disabled) { color: #c0392b; }
+.card-acts button:disabled { opacity: .3; cursor: default; }
+.card-acts svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.group .shot-card:not(.selected):hover .frame { box-shadow: 0 0 0 calc(1px * var(--ui, 1)) color-mix(in srgb, var(--ink) 22%, transparent), 0 14px 30px -14px rgba(18,18,18,.35); }
