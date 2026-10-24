@@ -192,6 +192,7 @@ function renderPreview() {
   const shot = state.shots[state.selected];
   $('empty').hidden = !!shot;
   $('previews').hidden = !shot;
+  $('dock').hidden = !shot;
   if (!shot) return;
   ensurePreviewStages();
   const s = previewScale();

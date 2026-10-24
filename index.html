@@ -67,41 +67,30 @@
           <figcaption><b>Outer display</b><span id="outerSize"></span></figcaption>
         </figure>
       </div>
+      <div id="dock" class="dock" role="toolbar" aria-label="Layout, theme and device" hidden>
+        <div id="layoutGrid" class="dock-group layout-grid" role="group" aria-label="Layout"></div>
+        <span class="dock-rule" aria-hidden="true"></span>
+        <div id="templateGrid" class="dock-group template-grid" role="group" aria-label="Theme"></div>
+        <span class="dock-rule" aria-hidden="true"></span>
+        <div class="dock-group">
+          <span class="dock-label">Inner</span>
+          <div class="segmented" data-pose="inner" role="group" aria-label="Inner display pose">
+            <button type="button" data-v="portrait" title="Inner display: portrait" aria-label="Portrait"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6" y="3" width="8" height="14" rx="2.2"/></svg></button><button type="button" data-v="landscape" title="Inner display: landscape" aria-label="Landscape"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="6" width="14" height="8" rx="2.2"/></svg></button>
+          </div>
+          <span class="dock-label">Outer</span>
+          <div class="segmented" data-pose="outer" role="group" aria-label="Outer display pose">
+            <button type="button" data-v="portrait" title="Outer display: portrait" aria-label="Portrait"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6" y="3" width="8" height="14" rx="2.2"/></svg></button><button type="button" data-v="landscape" title="Outer display: landscape" aria-label="Landscape"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="6" width="14" height="8" rx="2.2"/></svg></button>
+          </div>
+        </div>
+        <span class="dock-rule" aria-hidden="true"></span>
+        <div class="dock-group finish" title="Device finish">
+          <span id="colorSwatches" class="swatches"></span>
+          <span id="colorName" class="dock-label"></span>
+        </div>
+      </div>
     </section>
 
     <aside class="panel right" aria-label="Design">
-      <section class="group">
-        <h2>Layout</h2>
-        <div class="card pad"><div id="layoutGrid" class="layout-grid"></div></div>
-      </section>
-
-      <section class="group">
-        <h2>Theme</h2>
-        <div class="card pad"><div id="templateGrid" class="template-grid"></div></div>
-      </section>
-
-      <section class="group">
-        <h2>Device</h2>
-        <div class="card">
-          <div class="cell row-cell">
-            <span>Inner display</span>
-            <div class="segmented" data-pose="inner" role="group" aria-label="Inner display pose">
-              <button type="button" data-v="portrait">Portrait</button><button type="button" data-v="landscape">Landscape</button>
-            </div>
-          </div>
-          <div class="cell row-cell">
-            <span>Outer display</span>
-            <div class="segmented" data-pose="outer" role="group" aria-label="Outer display pose">
-              <button type="button" data-v="portrait">Portrait</button><button type="button" data-v="landscape">Landscape</button>
-            </div>
-          </div>
-          <div class="cell row-cell">
-            <span>Finish</span>
-            <span class="finish"><span id="colorName" class="value"></span><span id="colorSwatches" class="swatches"></span></span>
-          </div>
-        </div>
-      </section>
-
       <section class="group">
         <h2>Text <span class="muted" id="textFor"></span></h2>
         <div class="card">
