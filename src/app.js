@@ -405,11 +405,11 @@ function buildStructure() {
 function groupHead(group, device) {
   const head = el('header', 'group-head');
   const title = el('div', 'group-title', '<h2></h2><span class="group-count"></span>');
-  title.querySelector('h2').textContent = device.name;
+  title.querySelector('h2').textContent = device.family === 'iphone' ? 'iPhone' : device.name;
   const targets = targetsOfDevice(device.id);
   title.querySelector('.group-count').textContent = targets.length > 1
     ? `${targets.map(t => `${countOn(group, t.id)} ${t.display.label.toLowerCase()}`).join(' · ')} · up to ${MAX_SHOTS} each`
-    : `${group.shots.length} of ${MAX_SHOTS} screenshots`;
+    : `${group.shots.length} of ${MAX_SHOTS} · ${device.short} frame · 6.9″ display`;
   const tools = el('div', 'group-tools');
   const sw = el('span', 'swatches');
   sw.dataset.device = device.id;
@@ -882,7 +882,8 @@ function newGroup(device) {
   return g;
 }
 
-const usedElsewhere = (id) => picker?.mode !== 'first' && state.groups.some(g => g.device === id && g.id !== picker?.groupId);
+// One group per kind of device: every iPhone frame exports the same 6.9″ size, so there's one iPhone set.
+const usedElsewhere = (id) => picker?.mode !== 'first' && state.groups.some(g => deviceById(g.device).family === deviceById(id).family && g.id !== picker?.groupId);
 
 function renderDeviceList() {
   const list = $('deviceList');
@@ -901,7 +902,7 @@ function renderDeviceList() {
     pick.setAttribute('aria-checked', String(on));
     pick.disabled = !free.length;
     pick.querySelector('.tile-name').textContent = fam.name;
-    pick.querySelector('.tile-note').textContent = !free.length ? 'Already on the board' : fam.id === 'duo' ? 'Inner and outer display' : 'Air, 18 Pro or 18 Pro Max';
+    pick.querySelector('.tile-note').textContent = !free.length ? 'Already on the board' : fam.id === 'duo' ? 'Inner and outer display' : '6.9″ display, in an Air, 18 Pro or 18 Pro Max frame';
     pick.onclick = () => { picker.family = fam.id; picker.model = (free.find(m => m.id === state.models[fam.id]) || free[0]).id; renderDeviceList(); };
     tile.appendChild(pick);
     if (on && models.length > 1) {
@@ -1160,7 +1161,7 @@ function setupLicense() {
 // ---------- Export ----------
 // "iPhone-Duo-inner", "iPhone-Air": one folder per App Store display size; App Store Connect takes
 // portrait and landscape screenshots in the same slot.
-const folderName = (t) => `${t.device.name.replace(/\s+/g, '-')}${t.display.label ? '-' + t.display.id : ''}`;
+const folderName = (t) => (t.device.family === 'iphone' ? 'iPhone-6.9in' : `${t.device.name.replace(/\s+/g, '-')}${t.display.label ? '-' + t.display.id : ''}`);
 
 async function renderToPng(shot, tid, lang) {
   const size = sizeOf(tid, shot);

@@ -14,7 +14,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 // Apple's App Store sizes per folder, portrait and landscape.
 const VALID = {
   'iPhone-Duo-inner': ['2007x2853', '2853x2007'], 'iPhone-Duo-outer': ['1398x2034', '2034x1398'],
-  'iPhone-18-Pro-Max': ['1320x2868', '2868x1320'], 'iPhone-Air': ['1260x2736', '2736x1260'], 'iPhone-18-Pro': ['1206x2622', '2622x1206'],
+  'iPhone-6.9in': ['1320x2868'],   // every iPhone frame exports Apple's 6.9″ size
 };
 const out = path.join(here, 'out');
 await fs.mkdir(out, { recursive: true });
@@ -243,8 +243,8 @@ try {
   await page.screenshot({ path: path.join(out, 'devices.png') });
   const all = await exportZip(page, 'devices');
   const allPngs = await verifyZip(all.zip, 'devices', 18);
-  const air = allPngs.find(n => n.startsWith('en/iPhone-Air/01') && dimsOf[n] === '1260x2736');
-  check(!!air, 'iPhone Air export is 1260×2736');
+  const air = allPngs.find(n => n.startsWith('en/iPhone-6.9in/01') && dimsOf[n] === '1320x2868');
+  check(!!air, 'iPhone Air frame exports at the 6.9″ size, 1320×2868');
   if (air) await fs.writeFile(path.join(out, 'iphone-air-01.png'), await all.zip.file(air).async('nodebuffer'));
 
   // Variations: duplicate the second screenshot, restyle only the copy.
