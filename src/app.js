@@ -843,10 +843,10 @@ const POSE_ICON = {
 };
 // Display + orientation glyphs: the unfolded inner screen has a fold line, the cover screen a camera.
 const SCREEN_ICON = {
-  'inner-portrait': '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="4" y="2.5" width="12" height="15" rx="2"/><path d="M4.5 10h11" class="fold"/></svg>',
-  'inner-landscape': '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="4" width="15" height="12" rx="2"/><path d="M10 4.5v11" class="fold"/></svg>',
-  'outer-portrait': '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6" y="3" width="8" height="14" rx="2"/><circle cx="11.6" cy="5.4" r=".9" class="cam"/></svg>',
-  'outer-landscape': '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="6" width="14" height="8" rx="2"/><circle cx="14.6" cy="8.4" r=".9" class="cam"/></svg>',
+  'inner-portrait': '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="2.5" width="13" height="15" rx="2.6"/><path d="M3.5 10h13" class="hinge"/></svg>',
+  'inner-landscape': '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="2.6"/><path d="M10 3.5v13" class="hinge"/></svg>',
+  'outer-portrait': '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.5 3h6a2.5 2.5 0 0 1 2.5 2.5v9a2.5 2.5 0 0 1-2.5 2.5h-6z"/><circle cx="12.3" cy="5.7" r="0.95" class="cam"/></svg>',
+  'outer-landscape': '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 13.5v-6A2.5 2.5 0 0 1 5.5 5h9A2.5 2.5 0 0 1 17 7.5v6z"/><circle cx="5.7" cy="7.7" r="0.95" class="cam"/></svg>',
 };
 const CHECK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8.5l2.6 2.5L12 5.5"/></svg>';
 const SKETCH = {
