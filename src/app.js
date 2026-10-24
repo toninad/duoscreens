@@ -4,7 +4,7 @@ import { DEVICE_COLORS, loadFrames, getFrame } from './frames.js';
 import { TEMPLATES, LAYOUTS, FONTS, templateById } from './templates.js';
 import { buildComposition } from './render.js';
 import { canvasToRgbPng } from './png.js';
-import { checkLicense, claimCheckout, storedLicenseKey } from './license.js';
+import { checkLicense, claimCheckout, storedLicenseKey, forgetLicense } from './license.js';
 import { translateTexts } from './translate.js';
 import { makeSampleScreenshot, SAMPLE_SHOTS } from './sample.js';
 
@@ -536,8 +536,33 @@ function setupTranslate() {
 }
 
 // ---------- License (Pro) ----------
+const maskKey = (k) => (k.length > 14 ? `${k.slice(0, 8)}…${k.slice(-4)}` : k);
+
+async function copyKey(btn, key) {
+  try { await navigator.clipboard.writeText(key); }
+  catch {   // older browsers or no permission: select it so ⌘C works
+    const field = btn.previousElementSibling;
+    if (field?.select) field.select();
+    return toast('Press ⌘C or Ctrl+C to copy the key.');
+  }
+  const label = btn.lastChild;
+  btn.classList.add('copied'); label.textContent = 'Copied';
+  setTimeout(() => { btn.classList.remove('copied'); label.textContent = 'Copy'; }, 1800);
+}
+
+function showWelcome(key) {
+  $('welcomeKey').value = key;
+  $('licensePop').hidePopover?.();
+  $('proWelcome').showModal();
+  $('welcomeCopy').focus();
+}
+
 function applyLicense(valid, message) {
   state.licensed = valid;
+  const key = storedLicenseKey();
+  $('licenseForm').hidden = valid;
+  $('licenseActive').hidden = !valid;
+  $('activeKey').textContent = valid ? maskKey(key) : '';
   $('licenseBadge').textContent = valid ? 'Pro' : 'Free · watermark';
   $('licenseBadge').classList.toggle('pro', valid);
   if (message) $('licenseStatus').textContent = message;
@@ -560,23 +585,33 @@ function setupLicense() {
     applyLicense(r.valid, r.message);
   };
   $('licenseKey').onkeydown = (e) => { if (e.key === 'Enter') $('licenseBtn').click(); };
+  $('activeCopy').onclick = () => copyKey($('activeCopy'), storedLicenseKey());
+  $('welcomeCopy').onclick = () => copyKey($('welcomeCopy'), $('welcomeKey').value);
+  $('welcomeDone').onclick = () => $('proWelcome').close();
+  $('forgetBtn').onclick = () => {
+    forgetLicense();
+    $('licenseKey').value = '';
+    applyLicense(false, 'Removed from this browser. Paste your key to unlock again.');
+  };
   // Back from Polar checkout: open the license popover ready for the key.
   const params = new URLSearchParams(location.search);
   if (params.get('checkout') === 'success') {
     const checkoutId = params.get('checkout_id');
     history.replaceState(null, '', location.pathname);
-    requestAnimationFrame(() => $('licensePop').showPopover());
     if (!checkoutId) {
+      requestAnimationFrame(() => $('licensePop').showPopover());
       $('licenseStatus').textContent = 'Thanks for buying Pro! Paste the license key from your receipt email.';
       return;
     }
+    requestAnimationFrame(() => $('licensePop').showPopover());
     $('licenseStatus').textContent = 'Thanks for buying Pro! Unlocking…';
     $('licenseBtn').disabled = true;
     claimCheckout(checkoutId).then(r => {
       $('licenseBtn').disabled = false;
       if (r.valid) {
         $('licenseKey').value = r.key;
-        applyLicense(true, 'Pro unlocked. Thank you! Your key is shown above and in your receipt email; keep it for other devices.');
+        applyLicense(true, 'Pro unlocked. Thank you!');
+        showWelcome(r.key);
       } else {
         $('licenseStatus').textContent = r.message;
         $('licenseKey').focus();

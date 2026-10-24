@@ -130,7 +130,7 @@
 
   <div id="licensePop" class="pop pop-down" popover>
     <div class="card">
-      <div class="cell">
+      <div id="licenseForm" class="cell">
         <div class="pop-title">Duo Screenshot Studio Pro</div>
         <p class="hint pro-pitch">One-time purchase. No watermark, AI translation of your headlines into 39 languages, and future updates.</p>
         <a id="buyBtn" class="btn primary buy" href="#" target="_blank" rel="noopener">Get Pro&nbsp;·&nbsp;<span id="proPrice"></span></a>
@@ -141,6 +141,31 @@
         </div>
         <p id="licenseStatus" class="hint"></p>
       </div>
+      <div id="licenseActive" class="cell" hidden>
+        <div class="pop-title">Pro is active<span class="dot">.</span></div>
+        <p class="hint pro-pitch">No watermark, and translation is unlocked. Pro is saved in this browser.</p>
+        <div class="key-row">
+          <code id="activeKey" class="key-code"></code>
+          <button id="activeCopy" class="btn small copy-btn" type="button"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="2"/><path d="M13 4.5V4a1.5 1.5 0 0 0-1.5-1.5h-6A1.5 1.5 0 0 0 4 4v8a1.5 1.5 0 0 0 1.5 1.5H6"/></svg>Copy</button>
+        </div>
+        <p class="hint">Use the same key on up to 3 devices. It's also in your receipt email.</p>
+        <button id="forgetBtn" class="link-btn" type="button">Remove from this browser</button>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="proWelcome" class="welcome" aria-labelledby="welcomeTitle">
+    <svg class="welcome-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19"/><path d="M12.5 20.5l5 5 10-11"/></svg>
+    <h2 id="welcomeTitle">You're Pro<span class="dot">.</span></h2>
+    <p>Thank you for your support. The watermark is gone and translation is unlocked.</p>
+    <label class="welcome-label" for="welcomeKey">Your license key</label>
+    <div class="key-row big">
+      <input id="welcomeKey" class="key-code" type="text" readonly>
+      <button id="welcomeCopy" class="btn copy-btn" type="button"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="2"/><path d="M13 4.5V4a1.5 1.5 0 0 0-1.5-1.5h-6A1.5 1.5 0 0 0 4 4v8a1.5 1.5 0 0 0 1.5 1.5H6"/></svg>Copy</button>
+    </div>
+    <p class="fine">Saved in this browser. Keep it to unlock Pro on up to 3 devices; it's also in your receipt email.</p>
+    <button id="welcomeDone" class="btn primary" type="button">Start creating</button>
+  </dialog>
     </div>
   </div>
 

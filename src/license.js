@@ -13,6 +13,9 @@ const set = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.remo
 
 export const storedLicenseKey = () => get(KEY);
 
+/** Forget Pro in this browser (the key keeps working elsewhere). */
+export function forgetLicense() { set(KEY, ''); set(LAST_OK, ''); }
+
 export function deviceId() {
   let id = get(DEVICE);
   if (!id) { id = crypto.randomUUID(); set(DEVICE, id); }

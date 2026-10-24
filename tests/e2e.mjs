@@ -193,7 +193,14 @@ try {
   await page.evaluate(() => localStorage.clear());
   await page.goto(BASE + '/index.html?checkout=success&checkout_id=11111111-2222-3333-4444-555555555555');
   await page.waitForFunction(() => window.__dss?.state.licensed === true, null, { timeout: 15_000 });
-  check(claims === 2 && (await page.inputValue('#licenseKey')) === PRO_KEY, 'Checkout return unlocks Pro and shows the key');
+  check(claims === 2 && await page.isVisible('#proWelcome') && (await page.inputValue('#welcomeKey')) === PRO_KEY, 'Checkout return unlocks Pro and shows the key in a centred welcome');
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(out, 'welcome.png') });
+  await page.click('#welcomeDone');
+  check(!(await page.isVisible('#proWelcome')), 'Welcome closes');
+  await page.click('#licenseBadge');
+  check(await page.isVisible('#licenseActive') && (await page.textContent('#activeKey')).startsWith(PRO_KEY.slice(0, 8)), 'License popover shows Pro active with the key');
+  await page.keyboard.press('Escape');
   check(!(await page.evaluate(() => location.search)), 'Checkout parameters are removed from the address');
 
   check(errors.length === 0, `No page errors${errors.length ? ': ' + errors.join(' | ') : ''}`);

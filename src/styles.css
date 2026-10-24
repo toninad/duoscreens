@@ -323,6 +323,36 @@ input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border: 0; bord
 .lang-check.done span::after { content: ' ✓'; color: var(--orange); }
 #translateCount { font-size: 13px; flex: 1; }
 
+/* Pro active and welcome */
+.pop-title .dot, .welcome h2 .dot { color: var(--orange); }
+.key-row { display: flex; gap: 8px; align-items: center; margin: 4px 0 10px; }
+.key-code {
+  flex: 1; min-width: 0; padding: 9px 12px; border: 0; border-radius: 10px; background: var(--fill); color: var(--ink);
+  font: 500 13px/1.3 ui-monospace, 'SF Mono', Menlo, monospace; letter-spacing: .02em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; outline: none;
+}
+.copy-btn { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.copy-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.copy-btn.copied { color: var(--orange); }
+#licenseActive .link-btn { padding-top: 2px; }
+
+.welcome {
+  width: min(440px, calc(100vw - 32px)); padding: 32px 28px 24px; border: 0; border-radius: 22px; text-align: center;
+  background: var(--card); color: var(--ink); box-shadow: 0 30px 80px -20px rgba(0,0,0,.45), 0 0 0 .5px var(--hairline);
+}
+.welcome[open] { animation: rise .4s var(--ease); }
+.welcome::backdrop { background: color-mix(in srgb, var(--paper) 55%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.welcome-mark { width: 44px; height: 44px; margin: 0 auto 14px; display: block; }
+.welcome-mark circle { fill: var(--orange); }
+.welcome-mark path { fill: none; stroke: #fff; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.welcome h2 { font: 500 30px/1.1 var(--serif); letter-spacing: -0.02em; text-transform: none; color: var(--ink); margin: 0 0 8px; }
+.welcome p { color: var(--muted); margin: 0 auto 20px; max-width: 330px; line-height: 1.45; }
+.welcome-label { display: block; text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.key-row.big .key-code { font-size: 14px; padding: 12px 14px; }
+.key-row.big .copy-btn { padding: 11px 16px; }
+.welcome .fine { font-size: 12px; margin: 4px auto 20px; text-align: left; max-width: none; }
+.welcome .btn.primary { width: 100%; padding: 12px 16px; font-size: 15px; }
+
 /* Disclosure rows */
 details summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; min-height: 24px; }
 details summary::-webkit-details-marker { display: none; }
