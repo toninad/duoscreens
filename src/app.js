@@ -94,7 +94,8 @@ function renderTemplateGrid() {
     b.type = 'button';
     b.title = t.name;
     b.dataset.template = t.id;
-    b.setAttribute('aria-pressed', String(activeStyle().template.id === t.id));
+    const st = activeStyle();
+    b.setAttribute('aria-pressed', String(st.bg1.toLowerCase() === t.bg1.toLowerCase() && st.bg2.toLowerCase() === t.bg2.toLowerCase()));
     b.style.background = `linear-gradient(${t.bg1}, ${t.bg2})`;
     b.style.color = t.textColor;
     const fam = FONTS[t.font].family;
@@ -105,6 +106,11 @@ function renderTemplateGrid() {
     b.onclick = () => setTemplate(t.id);
     grid.appendChild(b);
   }
+  // Custom: shows the current colour once it's not one of the presets.
+  const st = activeStyle(), custom = $('customBg');
+  const isCustom = !grid.querySelector('[aria-pressed=true]');
+  custom.setAttribute('aria-pressed', String(isCustom));
+  custom.style.setProperty('--custom', isCustom ? `linear-gradient(${st.bg1}, ${st.bg2})` : '');
 }
 
 // Little diagrams of each layout: canvas, device and text lines.
@@ -135,7 +141,8 @@ function syncStyleInputs() {
   $('bg2').value = st.bg2;
   $('textColor').value = st.textColor;
   $('fontSelect').value = st.font;
-  $('headlineScale').value = st.headlineScale;
+  $('sizeLabel').textContent = `${Math.round((st.headlineScale || 1) * 100)}%`;
+  $('textColor').parentElement.style.setProperty('--text', st.textColor);
 }
 
 // ---------- Text ----------
@@ -872,8 +879,17 @@ function setupDropzone() {
 
 // ---------- Text & style inputs ----------
 function setupInputs() {
-  $('headlineScale').oninput = (e) => applyStyle({ headlineScale: +e.target.value });
+  const step = (d) => applyStyle({ headlineScale: Math.round(Math.min(1.4, Math.max(0.7, (activeStyle().headlineScale || 1) + d)) * 100) / 100 });
+  $('sizeDown').onclick = () => step(-0.1);
+  $('sizeUp').onclick = () => step(0.1);
   for (const k of ['bg1', 'bg2', 'textColor']) $(k).oninput = (e) => applyStyle({ [k]: e.target.value });
+  // The custom colour popover opens right above its swatch.
+  $('stylePop').addEventListener('beforetoggle', (e) => {
+    if (e.newState !== 'open') return;
+    const r = $('customBg').getBoundingClientRect(), pop = $('stylePop');
+    pop.style.left = `${Math.max(12, Math.min(innerWidth - 252, r.left + r.width / 2 - 120))}px`;
+    pop.style.bottom = `${innerHeight - r.top + 14}px`;
+  });
   const fs = $('fontSelect');
   for (const [k, f] of Object.entries(FONTS)) fs.add(new Option(f.label, k));
   fs.onchange = (e) => applyStyle({ font: e.target.value });
