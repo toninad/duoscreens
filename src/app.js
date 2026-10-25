@@ -2381,6 +2381,8 @@ async function setupSaving() {
 }
 
 // ---------- Boot ----------
+// Phones get a note to open Studio on a desktop instead of the editor (kept in step with styles.css).
+const PHONE = matchMedia('(max-width: 760px), (pointer: coarse) and (max-height: 500px)');
 async function boot() {
   const fromCheckout = new URLSearchParams(location.search).has('checkout');   // read before setupLicense tidies the address
   // Konva draws text on canvas, so fonts must be loaded before the first render.
@@ -2407,7 +2409,7 @@ async function boot() {
   setupBoards();
   sync?.init();
   // First visit: ask what the screenshots are for (not when coming back from checkout).
-  if (firstLaunch && !hadBoard && !fromCheckout) openDeviceDialog('first');
+  if (firstLaunch && !hadBoard && !fromCheckout && !PHONE.matches) openDeviceDialog('first');   // phones only see the desktop note
   window.__dss = { state, ready: true, saveNow, board: () => currentBoard, sync: () => sync }; // used by the headless test
 }
 // The page stays hidden (html.booting) until the saved board is drawn, so a refresh doesn't flash the
