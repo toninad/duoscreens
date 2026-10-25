@@ -889,3 +889,16 @@ body { display: block; height: 100dvh; }
   .template-grid button, .custom-swatch { box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); }
   .template-grid button[aria-pressed=true], .custom-swatch[aria-pressed=true] { box-shadow: inset 0 0 0 1px rgba(255,255,255,.2), 0 0 0 2px #2a2725, 0 0 0 3.5px var(--orange); }
 }
+
+/* Zoom: the same pill as the dock, same height and baseline, same stepper as text size. */
+.zoom-tools { bottom: 22px; height: auto; gap: 6px; padding: 6px; }
+.zoom-tools .size-step button { width: 30px; height: 32px; min-width: 0; padding: 0; }
+.zoom-tools .size-step svg { width: 14px; height: 14px; stroke-width: 1.7; }
+.zoom-tools .zoom-label { min-width: 44px; }
+.zoom-tools .zoom-fit {
+  height: 32px; padding: 0 12px 0 10px; border-radius: 999px; background: var(--fill); gap: 6px;
+  display: inline-flex; align-items: center; font-size: 13px; font-weight: 600; color: var(--ink);
+}
+.zoom-tools .zoom-fit:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+.zoom-tools .zoom-fit svg { width: 14px; height: 14px; stroke-width: 1.5; }
+@media (max-width: 860px) { .zoom-tools .size-step { display: none; } }

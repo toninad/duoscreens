@@ -48,10 +48,12 @@
         <div id="boardWorld" class="board-world"></div>
       </div>
       <div id="zoomTools" class="zoom-tools" hidden>
-        <button id="zoomOut" type="button" title="Zoom out (⌘−)" aria-label="Zoom out"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10h10"/></svg></button>
-        <span id="zoomLabel" class="zoom-label">100%</span>
-        <button id="zoomIn" type="button" title="Zoom in (⌘+)" aria-label="Zoom in"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 5v10M5 10h10"/></svg></button>
-        <button id="zoomFit" type="button" class="fit" title="Fit everything (⌘0)">Fit</button>
+        <span class="size-step" role="group" aria-label="Zoom">
+          <button id="zoomOut" type="button" title="Zoom out (⌘−)" aria-label="Zoom out"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8h8"/></svg></button>
+          <output id="zoomLabel" class="zoom-label">100%</output>
+          <button id="zoomIn" type="button" title="Zoom in (⌘+)" aria-label="Zoom in"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8h8M8 4v8"/></svg></button>
+        </span>
+        <button id="zoomFit" type="button" class="zoom-fit" title="Fit everything (⌘0)"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V3.5a1 1 0 0 1 1-1H6M10 2.5h2.5a1 1 0 0 1 1 1V6M13.5 10v2.5a1 1 0 0 1-1 1H10M6 13.5H3.5a1 1 0 0 1-1-1V10"/></svg>Fit</button>
       </div>
       <div id="dock" class="dock" role="toolbar" aria-label="Layout, background and text" hidden>
         <div id="layoutGrid" class="dock-group layout-grid" role="group" aria-label="Layout"></div>
