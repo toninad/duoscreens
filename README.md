@@ -25,7 +25,9 @@ translation, which sends **text only**.
 - **Export ZIP** with every screenshot × both displays × every language, at Apple's exact pixel sizes.
   The PNGs are **8-bit RGB with no alpha channel**, because App Store Connect rejects transparency. A tiny PNG encoder in `src/png.js` handles this, since `canvas.toBlob` always writes RGBA.
 - **Translate headlines (Pro):** pick any of 39 App Store languages and translate every headline at once with Claude. Each language becomes its own folder in the ZIP.
-- **Free vs Pro:** free exports carry a small "Made with HearHere Studio" watermark. **Pro** (€15.99 one-time, sold on Polar) removes it and unlocks translation.
+- **Boards, saved automatically:** everything on the canvas saves to the browser (IndexedDB) half a second after each change. Captures are scaled to at most 2868 px, re-encoded as WebP (JPEG where the browser can't) and stored once by SHA-256. A board menu switches, renames, duplicates and deletes boards, and exports or opens a `.hhstudio` backup (a ZIP of the board and its captures).
+- **Sync (Pro, opt-in):** boards follow the license key across browsers. Everything is end-to-end encrypted in the browser (AES-GCM and HMAC keys derived from the license key with HKDF); the server only stores ciphertext. Writes are versioned, so when two browsers change the same board both versions are kept.
+- **Free vs Pro:** free exports carry a small "Made with HearHere Studio" watermark. **Pro** (€15.99 one-time, sold on Polar) removes it and unlocks translation and sync.
 
 ## iPhone Duo screenshot sizes ✅ verified
 
@@ -73,9 +75,8 @@ To run the full app with the server functions and a local D1 database, use Wrang
 
 ```bash
 npm install
-npm run build
-npx wrangler d1 execute duo-studio --local --file=schema.sql
-npx wrangler pages dev _site --d1 DB=duo-studio   # put secrets in .dev.vars (gitignored)
+npm run dev        # builds, applies migrations/ to a local D1, and runs the Worker (local R2 too)
+                   # put secrets in .dev.vars (gitignored)
 ```
 
 ## Build
@@ -88,9 +89,11 @@ and new files. Tests, docs and the server code are not published.
 
 ```bash
 npm install
-npm run test:functions        # server functions: Polar and Anthropic faked, D1 emulated with node:sqlite
+npm run test:functions        # server functions: Polar and Anthropic faked, D1 (node:sqlite) and R2 (a Map) emulated
 
-cd tests && npm install && npx playwright install chromium && node e2e.mjs   # the app in a real browser
+cd tests && npm install && npx playwright install chromium
+node e2e.mjs                  # the app in a real browser
+node sync-e2e.mjs             # saving, backups, and two browsers syncing through the real sync handler
 ```
 
 The browser test uploads screenshots, edits text inline, switches every theme and layout, checks that translation is
@@ -112,7 +115,12 @@ buyer a license key. The app never talks to Polar or Anthropic directly; two Clo
   the monthly allowance (one run = all texts into one language), then calls Claude once per language with
   structured JSON output (Claude Haiku 5.5 by default). Only the text is sent, never images or the key.
 
-Both accept calls only from the app's own origin and are rate-limited per IP.
+- **`POST /api/sync/*`** (list, get, put, has, upload, download, delete-all): Pro sync, authenticated with the
+  license key and device id in headers. Boards are rows in D1 (`sync_boards`, base64 ciphertext with a version for
+  compare-and-set), images are objects in R2 under `<key hash>/<image id>`. A daily cron (`cleanupSync`) deletes images
+  no board has used for 7 days, deletion markers after 90 days, and all data of keys revoked over 30 days ago.
+
+All accept calls only from the app's own origin and are rate-limited per IP.
 
 **Cloudflare setup** (Pages project connected to this repo):
 
@@ -121,12 +129,15 @@ Both accept calls only from the app's own origin and are rate-limited per IP.
 | Build command | `npm ci && npm run build` |
 | Build output directory | `_site` |
 | Custom domain | `studio.hearhere.media` |
-| D1 binding | `DB` → a D1 database (e.g. `duo-studio`) with `schema.sql` applied |
+| D1 binding | `DB` → the D1 database `studio`; `migrations/` is applied on deploy |
 | Variable `POLAR_ORGANIZATION_ID` | your Polar organization ID |
 | Variable `POLAR_BENEFIT_ID` | optional: only keys from this benefit unlock |
 | Variable `ALLOWED_ORIGIN` | `https://studio.hearhere.media` |
 | Variable `TRANSLATION_RUNS_PER_MONTH` | optional, default `500` (one = all changed lines into one language) |
 | Variable `ANTHROPIC_MODEL` | optional, default `claude-haiku-5-5` |
+| R2 binding | `SYNC` → bucket `studio-sync` (create once: `wrangler r2 bucket create studio-sync`) |
+| Cron trigger | daily, runs the sync cleanup (in `wrangler.jsonc`) |
+| Variables `SYNC_BYTES_PER_KEY`, `SYNC_MAX_BOARDS` | optional, default 1 GB and 200 boards per license key |
 | Secret `POLAR_ACCESS_TOKEN` | Polar organization token with `license_keys:read`, `license_keys:write`, `checkouts:read` and `customer_sessions:write` |
 | Secret `ANTHROPIC_API_KEY` | Anthropic API key (use a separate workspace with a spend limit) |
 
@@ -144,7 +155,6 @@ just makes that inconvenient. Translation is the part that can't be bypassed, be
 - [ ] Cloudflare Pages project, D1 database, variables and secrets (table above), domain `studio.hearhere.media`; then retire the GitHub Pages workflow.
 - [ ] Privacy notice, terms and imprint pages.
 - [ ] Check that Apple's device frame images may be shipped inside the tool; replace the sample screenshots with neutral artwork.
-- [ ] Persist projects with IndexedDB; for now, reloading the page loses work.
 - [ ] Test in Safari and Firefox. The automated test only covers Chromium.
 - [ ] Per-screenshot layout and theme overrides.
 - [ ] Star White frames; fonts for Greek, Cyrillic, Arabic, Hebrew, Thai and CJK (they fall back to system fonts).
@@ -160,14 +170,17 @@ src/templates.js         themes, layouts and fonts
 src/frames.js            device frames and their measured screen openings
 src/render.js            Konva layout for one screenshot on one display
 src/png.js               RGB (no-alpha) PNG encoder
-src/app.js               state, UI, inline editing, export
+src/app.js               state, UI, inline editing, export, boards (save, open, backup)
+src/store.js             IndexedDB: boards, images, settings
+src/images.js            capture pipeline: scale, WebP, SHA-256
+src/sync.js              Pro sync client: encryption, push/pull, conflicts
 src/license.js           Pro license check (calls /api/license)
 src/translate.js         translation client (calls /api/translate)
 src/sample.js            sample screenshots (real captures in samples/, generated fallback)
-functions/api/           Cloudflare Pages Functions: license.js, translate.js
+functions/api/           API routes: license.js, translate.js, claim.js, sync.js
 functions/_lib/          Polar license logic, HTTP helpers, language list
-schema.sql               D1 tables
 scripts/build.mjs        builds _site/
-tests/                   e2e.mjs (browser), functions.test.mjs (server)
+migrations/              D1 schema (applied on deploy)
+tests/                   e2e.mjs, sync-e2e.mjs (browser), functions.test.mjs, sync.test.mjs (server)
 vendor/                  Konva, JSZip, fonts, device frames (+ licenses)
 ```

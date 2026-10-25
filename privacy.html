@@ -11,14 +11,24 @@
   <main class="page">
     <nav class="top"><a href="/">← HearHere Studio</a><a href="mailto:feedback@hearhere.media">Contact</a></nav>
     <h1>Privacy<span class="dot">.</span></h1>
-    <p class="meta">Last updated 24 October 2026</p>
+    <p class="meta">Last updated 25 October 2026</p>
 
-    <p>The short version: your screenshots never leave your device. I collect as little as possible, and nothing is used for ads or tracking.</p>
+    <p>The short version: your screenshots stay on your device unless you turn on sync (Pro), and then they're end-to-end encrypted, so I can't see them. I collect as little as possible, and nothing is used for ads or tracking.</p>
     <p>HearHere Studio is run by Toni Nad, who is responsible for your data. Contact: <a href="mailto:feedback@hearhere.media">feedback@hearhere.media</a>.</p>
 
     <h2>Your screenshots and texts</h2>
-    <p>Everything you make is processed in your browser. Screenshots, headlines and exports aren't uploaded to any server.</p>
+    <p>Everything you make is processed and saved in your browser. Screenshots, headlines and exports aren't uploaded to any server, unless you turn on sync (below).</p>
     <p>The only exception is translation (Pro). When you translate, the headline and subheadline texts, and the languages you picked, are sent to Anthropic's Claude API to be translated. Screenshots are never sent. Anthropic processes the text to return the translation; see <a href="https://www.anthropic.com/legal/privacy">Anthropic's privacy policy</a>.</p>
+
+    <h2>Sync (Pro, optional)</h2>
+    <p>If you turn on “Sync across browsers”, your boards (screenshots, texts, settings and board names) are stored on the HearHere Studio server, hosted on Cloudflare, so your other browsers with the same license key can get them. Sync is off until you turn it on.</p>
+    <ul>
+      <li>Everything is <strong>end-to-end encrypted</strong> in your browser before it's uploaded, with keys made from your license key. Your license key is sent to check your license, as with translation, but the server keeps only a fingerprint of it and never keeps the encryption keys, so what it stores can't be read.</li>
+      <li>What the server can see: how many boards and images you have, their sizes, when they changed, and a fingerprint of your license key.</li>
+      <li>Images no board uses any more are deleted automatically after 7 days. Deleted boards leave a small marker for 90 days so your other browsers know to delete them too.</li>
+      <li><strong>Delete synced data</strong> in the board menu removes everything synced for your key immediately. If Pro is refunded or revoked, synced data is deleted 30 days later.</li>
+      <li>Anyone who has your license key can read your synced boards, so keep the key to yourself.</li>
+    </ul>
 
     <h2>Buying Pro</h2>
     <p>Payments are handled by <a href="https://polar.sh">Polar</a>, the merchant of record. Polar collects your name, email, billing country and payment details to process the purchase and VAT; see Polar's privacy policy at <a href="https://polar.sh">polar.sh</a>. I never see your card details.</p>
@@ -36,7 +46,7 @@
     <p>To stop abuse, the server counts requests per IP address. That counter is deleted after about two minutes. The site is hosted on Cloudflare, which processes standard request data (like IP address and browser type) to deliver and protect the site.</p>
 
     <h2>Stored in your browser</h2>
-    <p>Your browser's local storage keeps your license key, the random browser ID and your device choices, so you don't have to set them up again. There are no cookies, no analytics and no ads. You can clear this any time by removing the license under Pro, or by clearing the site's data in your browser.</p>
+    <p>Your browser keeps your boards (screenshots, texts and settings), your license key, the random browser ID and your device choices, so your work is there next time. There are no cookies, no analytics and no ads. You can delete boards from the board menu, remove the license under Pro, or clear the site's data in your browser. Some browsers, Safari in particular, may clear a site's storage if you don't visit for a while: use Export backup, or sync, to keep a copy.</p>
 
     <h2>Your rights</h2>
     <p>You can ask what data I hold about you, ask for it to be corrected or deleted, and complain to your data protection authority. Email <a href="mailto:feedback@hearhere.media">feedback@hearhere.media</a> with your license key, and I'll remove its records.</p>

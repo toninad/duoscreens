@@ -122,15 +122,16 @@ export function createSync(app) {
 
   // ---------- Pull ----------
   async function downloadImages(doc) {
-    let missing = 0;
+    let missing = 0, got = 0;
     await pool(imageHashesOf(doc), 4, async (hash) => {
       if (await stored.has(hash)) return;
       const r = await api('download', { id: await remoteId(keys, hash) }).catch(e => { if (e.status === 404) return null; throw e; });
       if (!(r instanceof Uint8Array)) { missing++; return; }
       const bytes = await open(keys, r);
       await storeVerified(hash, new Blob([bytes], { type: sniffType(bytes) }));
+      got++;
     });
-    return missing;
+    return { missing, got };
   }
 
   async function pull(remote, { asCopy = false, base = null } = {}) {
@@ -151,7 +152,8 @@ export function createSync(app) {
       // Edited here while we were downloading: keep the edit; the next round sees the conflict.
       if (cur && base && (cur.updatedAt !== base.updatedAt || (cur.dirty && !base.dirty))) return null;
       applied = true;
-      return { id: remote.id, name: payload.name || 'Untitled board', doc: payload.doc, createdAt: payload.createdAt || now, updatedAt: remote.updatedAt || now, remoteVersion: g.version, dirty: false, deleted: false };
+      // Keep the time it was last edited (not when it reached the server), so boards sort by real edits.
+      return { id: remote.id, name: payload.name || 'Untitled board', doc: payload.doc, createdAt: payload.createdAt || now, updatedAt: payload.updatedAt || remote.updatedAt || now, remoteVersion: g.version, dirty: false, deleted: false };
     });
     if (applied) app.boardChanged(remote.id, base ? 'changed' : 'added');
   }
@@ -175,7 +177,7 @@ export function createSync(app) {
         const sealed = await seal(keys, new Uint8Array(await blob.arrayBuffer()));
         await api('upload', null, { raw: sealed, query: `?id=${await remoteId(keys, hash)}` });
       });
-      const data = await packBoard(keys, { name: rec.name, doc: rec.doc, createdAt: rec.createdAt });
+      const data = await packBoard(keys, { name: rec.name, doc: rec.doc, createdAt: rec.createdAt, updatedAt: rec.updatedAt });
       return api('put', { id: rec.id, baseVersion: rec.remoteVersion, data, images: ids, wipedAt: epoch });
     };
     let r = await send();
@@ -221,6 +223,11 @@ export function createSync(app) {
         await boards.update(r.id, c => c && ({ ...c, remoteVersion: r.version }));
       }
     }
+    // Captures a board here still waits for (missing on the server when it was pulled): try again.
+    for (const l of await boards.all()) {
+      if (l.deleted || !l.doc || !l.remoteVersion) continue;
+      if ((await downloadImages(l.doc)).got) app.boardChanged(l.id, 'changed');
+    }
     // Boards this browser synced before that the server no longer has (purged, or a new license
     // key): upload them again rather than lose them.
     for (const l of await boards.all()) {
@@ -241,11 +248,16 @@ export function createSync(app) {
       report({ state: 'syncing', usage: lastStatus.usage });
       let usage = lastStatus.usage;
       try {
-        for (let i = 0; i < 4; i++) {
-          again = false;
-          usage = (await round()) || usage;
-          if (!again) break;
-        }
+        const rounds = async () => {
+          for (let i = 0; i < 4; i++) {
+            again = false;
+            usage = (await round()) || usage;
+            if (!again) break;
+          }
+        };
+        // One tab at a time: two tabs syncing the same boards at once would trip over each other.
+        if (navigator.locks?.request) await navigator.locks.request('hhstudio-sync', rounds);
+        else await rounds();
         if (again) schedule(5000);   // a board was busy being edited, or kept conflicting: try again soon
         report(skipped.size
           ? { state: 'error', message: 'Some boards are waiting for images that aren’t in this browser yet.', usage }

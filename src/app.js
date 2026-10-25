@@ -1780,17 +1780,6 @@ function setupBoards() {
 
 /** Called when another tab or sync changed a saved board. */
 async function onBoardChanged(id, how) {
-  // Synced boards arrived while this browser only has an untouched starter board: open them instead.
-  if (how === 'added' && currentBoard && id !== currentBoard.id && !saveTimer && !editing) {
-    const cur = await boardStore.get(currentBoard.id);
-    if (!cur || cur.pristine) {
-      const starter = currentBoard.id;
-      await openBoard(id);
-      if (cur && !cur.remoteVersion) await boardStore.delete(starter);
-      renderBoardMenu();
-      return;
-    }
-  }
   if (how === 'removed' && id === currentBoard?.id) {
     toast('This board was deleted in another browser.');
     currentBoard = null;
@@ -1799,14 +1788,36 @@ async function onBoardChanged(id, how) {
     return;
   }
   if (id === currentBoard?.id && how === 'changed') {
-    if (saveTimer || editing || Date.now() - lastEditAt < 1500) return;   // busy here: sync keeps both versions instead
+    if (saveTimer || editing || Date.now() - lastEditAt < 1500) {   // mid-edit here: apply it once things settle
+      clearTimeout(onBoardChanged.retry);
+      onBoardChanged.retry = setTimeout(() => onBoardChanged(id, how), 1600);
+      return;
+    }
     const rec = await boardStore.get(id);
-    if (!rec?.doc || JSON.stringify(rec.doc) === lastSavedJson) return;
-    const keepFocus = { ...focus };
-    await hydrateBoard(rec.doc);
-    currentBoard.name = boardName(rec);
-    if (state.groups.some(g => g.id === keepFocus.group)) { Object.assign(focus, keepFocus); refresh(); }
+    if (!rec?.doc) return;
+    currentBoard.name = boardName(rec);   // a rename alone changes only the name
+    if (JSON.stringify(rec.doc) !== lastSavedJson || state.shots.some(s => s.missing)) {   // or captures just arrived
+      const keepFocus = { ...focus };
+      await hydrateBoard(rec.doc);
+      if (state.groups.some(g => g.id === keepFocus.group)) { Object.assign(focus, keepFocus); refresh(); }
+    }
   }
+  renderBoardMenu();
+}
+
+/**
+ * After a sync, if this browser only has an untouched starter board open, open the most recently
+ * edited synced board instead and drop the starter.
+ */
+async function leaveStarterBoard() {
+  if (!currentBoard || saveTimer || editing) return;
+  const cur = await boardStore.get(currentBoard.id);
+  if (cur && !cur.pristine) return;
+  const other = (await listBoards()).find(b => b.id !== currentBoard.id && !b.pristine);
+  if (!other) return;
+  const starter = currentBoard.id;
+  await openBoard(other.id);
+  if (cur && !cur.remoteVersion) await boardStore.delete(starter);
   renderBoardMenu();
 }
 
@@ -1825,7 +1836,7 @@ async function setupSaving() {
     isBusy: (id) => id === currentBoard?.id && (!!saveTimer || !!editing || Date.now() - lastEditAt < 1500),
     flush: () => saveNow(),
     boardChanged: (id, how) => onBoardChanged(id, how),
-    status: () => renderStatusLine(),
+    status: (st) => { renderStatusLine(); if (st.state === 'synced') leaveStarterBoard(); },
   });
   const all = await listBoards();
   const wanted = await metaStore.get('current').catch(() => null);

@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { onRequestPost as syncHandler, cleanupSync } from '../functions/api/sync.js';
 import { fakeD1, fakeR2 } from './fakes.mjs';
+import { PNG } from 'pngjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -51,8 +52,9 @@ async function attach(context) {
 }
 
 const browser = await chromium.launch();
-async function open(label) {
+async function open(label, { init } = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  if (init) await context.addInitScript(init);
   await attach(context);
   const page = await context.newPage();
   page.errors = [];
@@ -154,6 +156,54 @@ try {
   check(await headline(c) === 'Kept after reload', 'A backup opens in another browser with text and captures');
   await ctxC.close();
 
+  // ---------- Hardening ----------
+  // Two tabs on the same board: an edit in one shows up in the other.
+  const a2 = await ctxA.newPage();
+  a2.errors = [];
+  a2.on('pageerror', e => a2.errors.push(`A2: ${e.message}`));
+  await a2.goto(BASE); await ready(a2);
+  check(await headline(a2) === 'Kept after reload', 'A second tab opens the same board');
+  await setHeadline(a, 'Edited in tab one');
+  await a2.waitForFunction(() => window.__dss.state.shots[0].text.en[Object.keys(window.__dss.state.shots[0].text.en)[0]].headline === 'Edited in tab one', null, { timeout: 5000 })
+    .then(() => check(true, 'The other tab follows the edit'), () => check(false, 'The other tab follows the edit'));
+  await a2.close();
+  await setHeadline(a, 'Kept after reload');
+
+  // A huge capture is scaled down to what any export can use.
+  const big = new PNG({ width: 3000, height: 6000 });
+  big.data.fill(200);
+  const bigFile = path.join(out, 'big-capture.png');
+  await fs.writeFile(bigFile, PNG.sync.write(big));
+  const { context: ctxD, page: d } = await open('D');
+  await d.click('.tile[data-family="iphone"] .tile-select'); await d.click('#deviceDone');
+  await d.setInputFiles('#fileInput', bigFile);
+  await d.waitForFunction(() => window.__dss.state.shots.some(s => Object.keys(s.images).length));
+  const dims = await d.evaluate(() => { const img = Object.values(window.__dss.state.shots.find(s => Object.keys(s.images).length).images)[0]; return [img.naturalWidth, img.naturalHeight]; });
+  check(Math.max(...dims) === 2868, `A 3000 × 6000 capture is kept at ${dims.join(' × ')}`);
+
+  // A board from a newer version of the app doesn't break this one.
+  await d.evaluate(async () => {
+    await window.__dss.saveNow();
+    const db = await new Promise(r => { const o = indexedDB.open('hhstudio'); o.onsuccess = () => r(o.result); });
+    const t = db.transaction(['boards', 'meta'], 'readwrite');
+    t.objectStore('boards').put({ id: 'future-board-0001', name: 'From the future', doc: { format: 99, groups: [] }, createdAt: 1, updatedAt: Date.now() + 1e9, remoteVersion: 0, dirty: false });
+    t.objectStore('meta').put('future-board-0001', 'current');
+    await new Promise(r => { t.oncomplete = r; });
+  });
+  await d.reload(); await ready(d);
+  check((await d.textContent('#toast')).includes('newer version'), 'A board from a newer version explains itself');
+  check(await d.evaluate(() => window.__dss.state.groups.length > 0) && d.errors.length === 0, 'and the app still works');
+  await ctxD.close();
+
+  // No IndexedDB (some private windows): everything works, it just says it isn't saved.
+  const { context: ctxE, page: e } = await open('E', { init: () => { Object.defineProperty(window, 'indexedDB', { value: { open() { throw new Error('blocked'); } } }); } });
+  await e.click('.tile[data-family="duo"] .tile-select'); await e.click('#deviceDone');
+  await e.click('#sampleBtn');
+  await e.waitForFunction(() => window.__dss.state.shots.length === 4 && window.__dss.state.shots.every(s => Object.keys(s.images).length));
+  check((await e.textContent('#saveStatus')).includes('Not saved'), 'Without browser storage the app says boards aren’t saved');
+  check(e.errors.length === 0, `and nothing breaks${e.errors.length ? ': ' + e.errors.join(' | ') : ''}`);
+  await ctxE.close();
+
   // ---------- Sync ----------
   await unlock(a);
   await a.click('#boardSwitch');
@@ -177,6 +227,8 @@ try {
   await unlock(b);
   await b.click('#boardSwitch'); await b.click('#syncToggle'); await b.keyboard.press('Escape');
   await b.waitForFunction(() => window.__dss.sync().status.state === 'synced', null, { timeout: 30_000 });
+  await b.waitForFunction(() => document.getElementById('boardSwitchName').textContent === 'HearHere launch', null, { timeout: 5000 }).catch(() => {});
+  check(await b.textContent('#boardSwitchName') === 'HearHere launch', 'B opens the most recently edited synced board');
   const namesB = await boardNames(b);
   check(namesB.join() === 'HearHere launch,Untitled board', `B gets A's two boards, and drops its own untouched starter board: ${namesB.join(', ')}`);
   check(env.DB.raw.prepare('SELECT COUNT(*) AS n FROM sync_boards').get().n === 2, 'An untouched starter board is never uploaded');
@@ -191,6 +243,40 @@ try {
   await syncNow(a);
   await a.waitForFunction(() => window.__dss.state.shots[0].text.en[Object.keys(window.__dss.state.shots[0].text.en)[0]].headline === 'Edited in B', null, { timeout: 10_000 });
   check(true, 'An edit in one browser shows up in the other');
+
+  // A rename travels too.
+  await menu(a); await a.fill('#boardName', 'HearHere 3.2'); await a.press('#boardName', 'Enter'); await a.keyboard.press('Escape');
+  await a.waitForFunction(() => document.getElementById('boardSwitchName').textContent === 'HearHere 3.2');
+  await syncNow(a); await syncNow(b);
+  await b.waitForFunction(() => document.getElementById('boardSwitchName').textContent === 'HearHere 3.2', null, { timeout: 10_000 })
+    .then(() => check(true, 'Renaming a board reaches the other browser'), () => check(false, 'Renaming a board reaches the other browser'));
+
+  // A capture missing on the server: the board still opens, and editing it doesn't drop that capture.
+  const [lostKey, lostBytes] = [...env.SYNC.objects.entries()][0];
+  env.SYNC.objects.delete(lostKey);
+  const { context: ctxF, page: f } = await open('F');
+  await f.click('.tile[data-family="iphone"] .tile-select'); await f.click('#deviceDone');
+  await unlock(f);
+  await menu(f); await f.click('#syncToggle'); await f.keyboard.press('Escape');
+  await f.waitForFunction(() => window.__dss.sync().status.state !== 'syncing', null, { timeout: 30_000 });
+  await f.waitForFunction(() => document.getElementById('boardSwitchName').textContent === 'HearHere 3.2', null, { timeout: 10_000 });
+  const lost = await f.evaluate(() => window.__dss.state.shots.filter(s => s.missing).length);
+  check(lost === 1 && await headline(f) === 'Edited in B', `A board with a missing capture still opens (${lost} capture waiting)`);
+  await setHeadline(f, 'Edited in F');
+  const keptRef = await f.evaluate(async () => {
+    const db = await new Promise(r => { const o = indexedDB.open('hhstudio'); o.onsuccess = () => r(o.result); });
+    const cur = await new Promise(r => { const q = db.transaction('meta').objectStore('meta').get('current'); q.onsuccess = () => r(q.result); });
+    const rec = await new Promise(r => { const q = db.transaction('boards').objectStore('boards').get(cur); q.onsuccess = () => r(q.result); });
+    return rec.doc.groups.flatMap(g => g.shots).filter(s => Object.keys(s.images).length).length;
+  });
+  check(keptRef === 4, 'Editing that board keeps the missing capture in place');
+  env.SYNC.objects.set(lostKey, lostBytes);   // the server has it again: the next sync fills it in
+  await f.evaluate(() => window.__dss.sync().run());
+  await syncNow(f);
+  await f.reload(); await ready(f);
+  check(await f.evaluate(() => window.__dss.state.shots.every(s => !s.missing)), 'Once it’s back on the server it fills in');
+  await ctxF.close();
+  await syncNow(a); await syncNow(b);
 
   // Both edit while offline: nothing is lost.
   offline = true;
