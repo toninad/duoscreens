@@ -1,6 +1,6 @@
 /* global Konva, JSZip */
 import { PRO, WATERMARK_TEXT, LANGUAGES } from './config.js';
-import { FAMILIES, DEVICES, TARGETS, SCREENS, targetById, deviceById, familyOf, loadFrame, availableFinishes, getFrame } from './devices.js';
+import { FAMILIES, DEVICES, TARGETS, SCREENS, targetById, deviceById, familyOf, loadFrame, availableFinishes, getFrame, previewFrame } from './devices.js';
 import { TEMPLATES, LAYOUTS, FONTS, templateById } from './templates.js';
 import { buildComposition } from './render.js';
 import { canvasToRgbPng } from './png.js';
@@ -87,9 +87,11 @@ function syncToolbar() {
   renderLayoutGrid();
   syncStyleInputs();
   const sel = selectedShots();
-  $('scopeLabel').textContent = !sel.length ? 'All screenshots'
+  // The chip only appears while a selection narrows what the dock changes.
+  $('scopeLabel').textContent = !sel.length ? ''
     : sel.length === 1 ? `${deviceById(groupOf(sel[0].id).device).name} ${groupOf(sel[0].id).shots.indexOf(sel[0]) + 1}` : `${sel.length} selected`;
   $('scopeLabel').classList.toggle('on', sel.length > 0);
+  $('scopeBox').hidden = !sel.length || document.body.classList.contains('home-mode');
 }
 
 
@@ -565,10 +567,9 @@ function renderBoard({ fit = false } = {}) {
   for (const g of state.groups) if (!g.shots.length) g.shots.push(newShot(g));   // every group has a card to fill
   const has = true;
   $('empty').hidden = true;
-  for (const id of ['board', 'dock', 'boardTools', 'zoomTools', 'scopeLabel']) $(id).hidden = !has;
+  for (const id of ['board', 'dock', 'boardTools', 'zoomTools']) $(id).hidden = !has;
   $('exportBtn').disabled = !state.shots.some(hasAnyImage);
   $('sampleBtn').hidden = state.shots.some(hasAnyImage);
-  $('langLabel').textContent = state.langs.length > 1 ? `${state.langs.length} languages` : 'Translate';
   if (!has) return;
   renderSidePanel();
   const key = JSON.stringify([state.groups.map(g => [g.device, g.shots.map(s => [s.id, s.target, s.pose])]), state.langs, state.colors, state.licensed, focusedGroup()?.id, focusedLang(), focus.compare]);
@@ -1068,6 +1069,18 @@ const SCREEN_ICON = {
   'outer-landscape': '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 13.5v-6A2.5 2.5 0 0 1 5.5 5h9A2.5 2.5 0 0 1 17 7.5v6z"/><circle cx="5.7" cy="7.7" r="0.95" class="cam"/></svg>',
 };
 const CHECK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8.5l2.6 2.5L12 5.5"/></svg>';
+// The picker shows each family as the real device: its frame over a warm screen, sized by shape.
+function tileArt(famId) {
+  const model = DEVICES.find(d => d.id === state.models[famId] && d.family === famId) || DEVICES.find(d => d.family === famId);
+  const f = model && previewFrame(model.id, state.colors[model.id]);
+  if (!f) return SKETCH[famId] || '';
+  const { w, h, screen } = f.geo;
+  const pct = (v, of) => `${((v / of) * 100).toFixed(2)}%`;
+  return `<span class="tile-device ${w > h ? 'wide' : 'tall'}" style="aspect-ratio:${w}/${h}">`
+    + `<span class="tile-screen" style="left:${pct(screen.x, w)};top:${pct(screen.y, h)};width:${pct(screen.w, w)};height:${pct(screen.h, h)}"></span>`
+    + `<img src="${f.src}" alt="" draggable="false" decoding="async"></span>`;
+}
+
 const SKETCH = {
   // iPhone, drawn to the real proportions: body ≈ 0.49 : 1, corners ≈ 15% of the width,
   // a slim Dynamic Island ≈ 22% of the width, side buttons.
@@ -1123,7 +1136,7 @@ function renderDeviceList() {
     const on = picker.family === fam.id;
     const tile = el('section', 'tile' + (on ? ' on' : '') + (free.length ? '' : ' taken'));
     tile.dataset.family = fam.id;
-    const pick = el('button', 'tile-select', `<span class="tile-sketch">${SKETCH[fam.id] || ''}</span>
+    const pick = el('button', 'tile-select', `<span class="tile-art">${tileArt(fam.id)}</span>
       <span class="tile-text"><span class="tile-name"></span><span class="tile-note"></span></span><span class="tile-check">${CHECK}</span>`);
     pick.type = 'button';
     pick.setAttribute('role', 'radio');
@@ -1230,12 +1243,13 @@ const langName = (code) => LANGUAGES.find(l => l[0] === code)?.[1] || code;
 
 // The picker opens out of whatever opened it: beside the side panel's "Add languages" row on desktop,
 // under the panel strip on phones, under the top bar's button otherwise.
-let langAnchor = null, langClosedAt = 0;
+let langAnchor = null, langClosedAt = -1, langPressAt = 0;
+addEventListener('pointerdown', () => { langPressAt = performance.now(); }, true);
 function openLangPicker(anchor) {
   const pop = $('langPop');
   // A second click on the same opener closes it (light dismiss may already have, on pointerdown).
   if (pop.matches(':popover-open')) return pop.hidePopover();
-  if (langAnchor && (langAnchor.id || langAnchor.className) === (anchor.id || anchor.className) && performance.now() - langClosedAt < 250) return;   // the panel re-renders its rows, so compare by kind
+  if (langAnchor && (langAnchor.id || langAnchor.className) === (anchor.id || anchor.className) && langClosedAt >= langPressAt) return;   // closed by this very press (light dismiss on pointerdown); rows re-render, so compare by kind
   langAnchor = anchor;
   $('langSearch').value = '';
   $('translateStatus').textContent = '';
@@ -1322,7 +1336,6 @@ function setupTranslate() {
   $('langSearch').oninput = () => renderLangChecks();
   $('langSearch').onkeydown = (e) => { if (e.key === 'Escape' && e.target.value) { e.preventDefault(); e.stopPropagation(); e.target.value = ''; renderLangChecks(); } };
   $('langClose').onclick = () => $('langPop').hidePopover();
-  $('langBtn').onclick = () => openLangPicker($('langBtn'));
   addEventListener('resize', placeLangPicker);
   $('langPop').addEventListener('beforetoggle', (e) => { if (e.newState === 'closed') langClosedAt = performance.now(); });   // sync, unlike toggle
   $('translateBtn').onclick = () => translateInto(selectedTargets());
@@ -1450,7 +1463,8 @@ function applyLicense(valid, message) {
   $('licenseForm').hidden = valid;
   $('licenseActive').hidden = !valid;
   $('activeKey').textContent = valid ? maskKey(key) : '';
-  $('licenseBadge').textContent = valid ? 'Pro' : 'Free · watermark';
+  $('licenseBadge').textContent = valid ? 'Pro' : 'Get Pro';
+  $('licenseBadge').title = valid ? 'HearHere Studio Pro: your license' : 'Free: exports carry a small watermark. Pro removes it and adds translation, more devices and sync.';
   $('licenseBadge').classList.toggle('pro', valid);
   if (message) $('licenseStatus').textContent = message;
   syncTranslateButton();

@@ -8,6 +8,9 @@
   <meta name="theme-color" content="#141312" media="(prefers-color-scheme: dark)">
   <title>HearHere Studio — App Store screenshots for iPhone and iPhone Duo</title>
   <meta name="description" content="Turn your app screenshots into App Store-ready screenshots for iPhone Duo, iPhone Air and iPhone 18, with headlines, themes and translations. Runs in your browser; images never leave your device.">
+  <link rel="icon" type="image/svg+xml" href="vendor/brand/favicon.svg">
+  <link rel="alternate icon" type="image/png" href="vendor/brand/favicon.png">
+  <link rel="apple-touch-icon" href="vendor/brand/favicon.png">
   <link rel="preload" href="vendor/fonts/source-sans-3-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/source-serif-4-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="src/styles.css?v=dev">
@@ -30,13 +33,9 @@
           <input id="frameFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
         </div>
     </div>
-    <div class="top-center"><span id="scopeLabel" class="scope-chip" title="Toolbar changes apply to this. Click a screenshot to change only that one; click the background for all.">All screenshots</span></div>
+    <div id="scopeBox" class="top-center" hidden><span id="scopeLabel" class="scope-chip" title="Toolbar changes apply to this. Click a screenshot to change only that one; click the background for all.">All screenshots</span></div>
     <div class="topbar-actions">
-      <button id="langBtn" class="pill-btn" type="button" title="Language and translation" aria-haspopup="dialog">
-        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.2"/><path d="M2.8 10h14.4M10 2.8c2 2 2.9 4.4 2.9 7.2S12 15.2 10 17.2C8 15.2 7.1 12.8 7.1 10S8 4.8 10 2.8z"/></svg>
-        <span id="langLabel">English</span>
-      </button>
-      <button id="licenseBadge" class="pill-btn badge" popovertarget="licensePop">Free · watermark</button>
+      <button id="licenseBadge" class="badge-pill" popovertarget="licensePop">Get Pro</button>
       <button id="exportBtn" class="btn primary" disabled>Export</button>
     </div>
   </header>

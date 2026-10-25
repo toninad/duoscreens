@@ -180,3 +180,16 @@ export function getFrame(deviceId, colorId, displayId, pose) {
   const img = images.get(phoneFile(deviceId, color));
   return img ? { img, geo: device.geometry } : null;
 }
+
+/** A family's picture for the device picker: one model's frame file and its geometry, without loading it. */
+export function previewFrame(deviceId, colorId) {
+  const device = deviceById(deviceId);
+  if (!device) return null;
+  const color = colorId || device.colors[0].id;
+  if (deviceId === 'duo') return { src: duoFile(color, 'outer', 'portrait'), geo: DUO_GEOMETRY.outer.portrait };
+  if (device.poseGeometry) {
+    const pose = device.poseGeometry.landscape ? 'landscape' : 'portrait';
+    return { src: poseFile(deviceId, color, pose), geo: device.poseGeometry[pose] };
+  }
+  return { src: phoneFile(deviceId, color), geo: device.geometry };
+}

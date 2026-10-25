@@ -166,7 +166,7 @@ try {
   check(!(await page.evaluate(() => document.querySelector('#langPop').matches(':popover-open'))), 'A second click on Add languages closes the picker');
 
   // Translation is Pro only: without a license the button offers Pro instead of calling the server.
-  await page.click('#langBtn');
+  await page.click('#langNav .side-add');
   await page.check('#langChecks label:has(input[value="de"])');
   await page.check('#langChecks label:has(input[value="ja"])');
   check((await page.textContent('#translateBtn')).includes('Get Pro'), 'Translate asks for Pro while unlicensed');
@@ -198,7 +198,7 @@ try {
   await page.keyboard.press('Escape');
 
   // Translate into German and Japanese in one go
-  await page.click('#langBtn');
+  await page.click('#langNav .side-add');
   await page.check('#langChecks label:has(input[value="de"])');
   await page.check('#langChecks label:has(input[value="ja"])');
   await page.evaluate(() => {   // note the side panel's skeleton rows while the request is out
