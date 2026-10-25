@@ -244,7 +244,7 @@ input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border: 0; bord
 
 /* Floating toolbar over the canvas: layout, theme, pose, finish */
 .dock {
-  position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 3;
+  position: absolute; left: 50%; bottom: 22px; translate: -50% 0; z-index: 3;   /* translate, not transform: the entrance animation animates transform */
   display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 999px; white-space: nowrap;
   max-width: calc(100% - 32px); overflow-x: auto; scrollbar-width: none;
   background: color-mix(in srgb, var(--card) 76%, transparent);
@@ -427,7 +427,7 @@ details[open] summary { margin-bottom: 12px; }
 
 /* Toast */
 .toast {
-  position: fixed; bottom: max(24px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 10;
+  position: fixed; bottom: max(24px, env(safe-area-inset-bottom)); left: 50%; translate: -50% 0; z-index: 10;
   background: color-mix(in srgb, var(--ink) 92%, transparent); color: var(--paper);
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   padding: 11px 18px; border-radius: 999px; font-size: 14px; box-shadow: 0 12px 32px rgba(0,0,0,.25);
@@ -449,7 +449,7 @@ details[open] summary { margin-bottom: 12px; }
   .board-tools { top: 12px; left: 12px; }
   .zoom-tools { top: 12px; bottom: auto; right: 12px; }
   #zoomOut, #zoomIn, #zoomLabel { display: none; }
-  .dock { position: absolute; left: 10px; right: 10px; bottom: max(10px, env(safe-area-inset-bottom)); transform: none; max-width: none; justify-content: flex-start; background: color-mix(in srgb, var(--card) 94%, transparent); }
+  .dock { position: absolute; left: 10px; right: 10px; bottom: max(10px, env(safe-area-inset-bottom)); transform: none; translate: none; max-width: none; justify-content: flex-start; background: color-mix(in srgb, var(--card) 94%, transparent); }
   .card-tools { opacity: 1; }
   .row-shots { flex-direction: column; gap: 36px; }
   .pop-up { bottom: calc(76px + env(safe-area-inset-bottom)); }

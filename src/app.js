@@ -4,7 +4,7 @@ import { FAMILIES, DEVICES, TARGETS, SCREENS, targetById, deviceById, familyOf, 
 import { TEMPLATES, LAYOUTS, FONTS, templateById } from './templates.js';
 import { buildComposition } from './render.js';
 import { canvasToRgbPng } from './png.js';
-import { checkLicense, claimCheckout, storedLicenseKey, forgetLicense } from './license.js';
+import { checkLicense, claimCheckout, storedLicenseKey, forgetLicense, recentlyConfirmed } from './license.js';
 import { translateTexts } from './translate.js';
 import { makeSampleScreenshot, SAMPLE_SHOTS } from './sample.js';
 import { openStore, boards as boardStore, meta as metaStore, cleanupImages, askPersistence, imageHashesOf } from './store.js';
@@ -1644,7 +1644,14 @@ function setupLicense() {
   if (PRO.checkoutUrl) buy.href = PRO.checkoutUrl;
   else { buy.removeAttribute('href'); buy.classList.add('disabled'); buy.title = 'Checkout is not set up yet'; }
   const saved = storedLicenseKey();
-  if (saved) { $('licenseKey').value = saved; checkLicense(saved).then(r => applyLicense(r.valid, r.message)); }
+  if (saved) {
+    $('licenseKey').value = saved;
+    // A key confirmed in the last few days is Pro from the first frame; the server check runs behind
+    // it and only takes Pro away if the key was actually revoked.
+    const trusted = recentlyConfirmed();
+    if (trusted) applyLicense(true);
+    checkLicense(saved).then(r => { if (!(trusted && r.valid)) applyLicense(r.valid, r.message); });
+  }
   $('licenseBtn').onclick = async () => {
     $('licenseBtn').disabled = true;
     $('licenseStatus').textContent = 'Checking…';

@@ -13,6 +13,9 @@ const set = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.remo
 
 export const storedLicenseKey = () => get(KEY);
 
+/** True when this browser's key was confirmed recently, so the app can show Pro before the server answers. */
+export const recentlyConfirmed = () => !!get(KEY) && Date.now() - Number(get(LAST_OK) || 0) < OFFLINE_GRACE;
+
 /** Forget Pro in this browser (the key keeps working elsewhere). */
 export function forgetLicense() { set(KEY, ''); set(LAST_OK, ''); }
 
