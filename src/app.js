@@ -1,6 +1,6 @@
 /* global Konva, JSZip */
 import { PRO, WATERMARK_TEXT, LANGUAGES } from './config.js';
-import { FAMILIES, DEVICES, TARGETS, SCREENS, targetById, deviceById, loadFrame, availableFinishes, getFrame } from './devices.js';
+import { FAMILIES, DEVICES, TARGETS, SCREENS, targetById, deviceById, familyOf, loadFrame, availableFinishes, getFrame } from './devices.js';
 import { TEMPLATES, LAYOUTS, FONTS, templateById } from './templates.js';
 import { buildComposition } from './render.js';
 import { canvasToRgbPng } from './png.js';
@@ -29,7 +29,12 @@ const targetOf = (shot) => targetById(shot.target) || firstTarget(groupOf(shot.i
 const targetsOf = (shot) => [targetOf(shot)];
 const countOn = (group, tid) => group.shots.filter(s => targetOf(s).id === tid).length;   // per App Store size, max 10
 // Each card has its own orientation (iPhones are always portrait).
-const poseOf = (shot) => (!shot || targetOf(shot).display.poses?.length === 1 ? 'portrait' : shot.pose || 'portrait');
+// What a device's group is called: the family (iPhone, iPad, Mac) when the model is just a frame choice.
+const groupName = (d) => familyOf(d)?.name || d.name;
+const poseOf = (shot) => {   // a display with one pose (iPhone portrait, Mac landscape) always uses it
+  const poses = shot && targetOf(shot).display.poses;
+  return poses?.length === 1 ? poses[0] : shot?.pose || 'portrait';
+};
 const sizeOf = (tid, shot) => targetById(tid).display.size[poseOf(shot)];
 const targetLabel = (t) => t.display.label ? `${t.device.name} · ${t.display.label}` : t.device.name;
 
@@ -409,7 +414,7 @@ function buildStructure() {
         // A round "+" after the last screen; the new card starts like the one before it.
         const add = el('button', 'add-screen', PLUS);
         add.type = 'button';
-        add.title = `Add ${device.family === 'iphone' ? 'an iPhone' : `a ${device.short || device.name}`} screen`;
+        add.title = `Add ${/^[AEIOU]|^i[A-Z]/.test(groupName(device)) ? 'an' : 'a'} ${groupName(device)} screen`;
         add.setAttribute('aria-label', add.title);
         add.onclick = () => { group.shots.push(newShot(group)); refresh({ fit: true }); };
         cards.appendChild(add);
@@ -450,7 +455,7 @@ function renderSidePanel() {
   const g0 = focusedGroup();
   for (const g of state.groups) {
     const d = deviceById(g.device);
-    const b = row(d.family === 'iphone' ? 'iPhone' : d.name, String(g.shots.length), g === g0, () => setFocus({ group: g.id }));
+    const b = row(groupName(d), String(g.shots.length), g === g0, () => setFocus({ group: g.id }));
     b.dataset.group = g.id; b.dataset.device = g.device;
     nav.appendChild(b);
   }
@@ -511,7 +516,7 @@ function renderSidePanel() {
 function groupHead(group, device) {
   const head = el('header', 'group-head');
   const title = el('div', 'group-title', '<h2></h2><span class="group-count"></span>');
-  title.querySelector('h2').textContent = device.family === 'iphone' ? 'iPhone' : device.name;
+  title.querySelector('h2').textContent = groupName(device);
   const targets = targetsOfDevice(device.id);
   title.querySelector('.group-count').textContent = targets.length > 1
     ? targets.map(t => `${countOn(group, t.id)} ${t.display.label.toLowerCase()}`).join(' · ')
@@ -1509,7 +1514,7 @@ function setupLicense() {
 // ---------- Export ----------
 // "iPhone-Duo-inner", "iPhone-Air": one folder per App Store display size; App Store Connect takes
 // portrait and landscape screenshots in the same slot.
-const folderName = (t) => (t.device.family === 'iphone' ? 'iPhone-6.9in' : `${t.device.name.replace(/\s+/g, '-')}${t.display.label ? '-' + t.display.id : ''}`);
+const folderName = (t) => familyOf(t.device)?.folder || `${t.device.name.replace(/\s+/g, '-')}${t.display.label ? '-' + t.display.id : ''}`;
 
 async function renderToPng(shot, tid, lang) {
   const size = sizeOf(tid, shot);
@@ -1578,7 +1583,7 @@ async function exportZip() {
       await new Promise(r => setTimeout(r)); // keep UI responsive
     }
     zip.file('README.txt', `App Store screenshots — made with HearHere Studio\n\n` +
-      targets.map(t => `${targetLabel(t)}: ${folderName(t)} (${t.display.size.portrait.width} × ${t.display.size.portrait.height}${t.display.poses ? '' : ' or landscape'})`).join('\n') +
+      targets.map(t => { const sz = t.display.size[t.display.poses?.[0] || 'portrait']; return `${targetLabel(t)}: ${folderName(t)} (${sz.width} × ${sz.height}${t.display.poses ? '' : ' or landscape'})`; }).join('\n') +
       `\n\nUpload each folder to the matching device size in App Store Connect (1–10 per size).\nPNG, RGB, no alpha channel.\n`);
     const out = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
     const a = document.createElement('a');
@@ -1935,7 +1940,7 @@ function showHome(on) {
   }
 }
 
-const deviceLabel = (id) => { const d = deviceById(id); return d?.family === 'iphone' ? 'iPhone' : d?.name || id; };
+const deviceLabel = (id) => { const d = deviceById(id); return d ? groupName(d) : id; };
 
 async function renderHome() {
   const grid = $('homeGrid');

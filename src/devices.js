@@ -15,15 +15,19 @@ export const SCREENS = {
   'duo/inner': 'iPhone Duo inner display',
   'duo/outer': 'iPhone Duo outer display',
   iphone: 'iPhone',
+  ipad: 'iPad',
+  mac: 'Mac',
 };
 
 // What people pick first: a kind of device, then (for iPhone) one model.
+// `folder` names the export folder when every model in the family shares one App Store size.
 export const FAMILIES = [
-  { id: 'iphone', name: 'iPhone', note: 'Air, 18 Pro or 18 Pro Max' },
+  { id: 'iphone', name: 'iPhone', note: 'Air, 18 Pro or 18 Pro Max', folder: 'iPhone-6.9in' },
   { id: 'duo', name: 'iPhone Duo', note: 'Inner and outer display' },
-  { id: 'ipad', name: 'iPad', note: 'Coming soon', soon: true },
-  { id: 'mac', name: 'Mac', note: 'Coming soon', soon: true },
+  { id: 'ipad', name: 'iPad', note: 'iPad Pro 11″ or iPad mini', folder: 'iPad-13in' },
+  { id: 'mac', name: 'Mac', note: 'MacBook Pro', folder: 'Mac' },
 ];
+export const familyOf = (device) => FAMILIES.find(f => f.id === device?.family);
 
 export const DEVICES = [
   {
@@ -71,6 +75,40 @@ export const DEVICES = [
       // { id: 'silver', name: 'Silver', swatch: '#dcdcde' },   // add once vendor/frames/iphone-18-pro/silver.webp exists
     ],
   },
+  // iPads: App Store Connect requires the 13″ size (2064 × 2752) and scales it for smaller iPads, so both
+  // frames export at that size, in portrait or landscape. Portrait frames are the landscape renders turned
+  // a quarter clockwise. The 11″ and mini screens are a little longer than 4:3, so a 13″ capture is
+  // trimmed slightly at the ends to fill them.
+  {
+    id: 'ipad-pro-11', family: 'ipad', name: 'iPad Pro 11″', short: 'Pro 11″', note: '13″ App Store size',
+    displays: [{ id: 'main', label: '', size: sizes(2064, 2752), screen: 'ipad' }],
+    poseGeometry: {
+      landscape: { w: 2000, h: 1424, screen: { x: 83, y: 80, w: 1834, h: 1264 }, radii: [44, 44, 44, 44] },
+      portrait:  { w: 1424, h: 2000, screen: { x: 80, y: 83, w: 1264, h: 1834 }, radii: [44, 44, 44, 44] },
+    },
+    colors: [
+      { id: 'space-black', name: 'Space Black', swatch: '#2c2c2e' },
+      { id: 'silver', name: 'Silver', swatch: '#dcdcde' },
+    ],
+  },
+  {
+    id: 'ipad-mini', family: 'ipad', name: 'iPad mini', short: 'mini', note: '13″ App Store size',
+    displays: [{ id: 'main', label: '', size: sizes(2064, 2752), screen: 'ipad' }],
+    poseGeometry: {
+      landscape: { w: 2000, h: 1396, screen: { x: 111, y: 114, w: 1778, h: 1168 }, radii: [35, 35, 35, 35] },
+      portrait:  { w: 1396, h: 2000, screen: { x: 114, y: 111, w: 1168, h: 1778 }, radii: [35, 35, 35, 35] },
+    },
+    colors: [{ id: 'starlight', name: 'Starlight', swatch: '#e9e1d3' }],
+  },
+  // Mac: 2880 × 1800 (16:10), landscape only. The opening includes the notch strip, as macOS captures do.
+  {
+    id: 'macbook-pro', family: 'mac', name: 'MacBook Pro', short: 'MacBook Pro', note: '2880 × 1800',
+    displays: [{ id: 'main', label: '', size: sizes(1800, 2880), screen: 'mac', poses: ['landscape'] }],
+    poseGeometry: {
+      landscape: { w: 2000, h: 1208, screen: { x: 207, y: 30, w: 1586, h: 1051 }, radii: [15, 15, 0, 0] },
+    },
+    colors: [{ id: 'space-gray', name: 'Space Gray', swatch: '#7d7e80' }],
+  },
 ];
 
 /** Every App Store size the app can make: one per device display, e.g. "duo/inner" or "iphone-air/main". */
@@ -91,9 +129,10 @@ const DUO_GEOMETRY = {
 };
 
 // Files: vendor/frames/<duo finish>/<display>-<pose>.webp for the Duo, vendor/frames/<device>/<color>.webp
-// (portrait only) for the iPhones.
+// (portrait only) for the iPhones, vendor/frames/<device>/<color>-<pose>.webp for iPads and Macs.
 const duoFile = (color, display, pose) => `vendor/frames/${color}/${display}-${pose}.webp`;
 const phoneFile = (device, color) => `vendor/frames/${device}/${color}.webp`;
+const poseFile = (device, color, pose) => `vendor/frames/${device}/${color}-${pose}.webp`;
 
 const images = new Map();     // file -> HTMLImageElement
 
@@ -113,8 +152,10 @@ const loadImg = (src) => {
  * only downloads the frames in use. Resolves true when they're ready.
  */
 export async function loadFrame(deviceId, colorId) {
+  const device = deviceById(deviceId);
   const files = deviceId === 'duo'
     ? ['inner', 'outer'].flatMap(x => ['portrait', 'landscape'].map(p => duoFile(colorId, x, p)))
+    : device?.poseGeometry ? Object.keys(device.poseGeometry).map(p => poseFile(deviceId, colorId, p))
     : [phoneFile(deviceId, colorId)];
   return (await Promise.all(files.map(loadImg))).every(Boolean);
 }
@@ -130,6 +171,11 @@ export function getFrame(deviceId, colorId, displayId, pose) {
   if (deviceId === 'duo') {
     const img = images.get(duoFile(color, displayId, pose)) || images.get(duoFile(device.colors[0].id, displayId, pose));
     return img ? { img, geo: DUO_GEOMETRY[displayId][pose] } : null;
+  }
+  if (device.poseGeometry) {
+    const p = device.poseGeometry[pose] ? pose : Object.keys(device.poseGeometry)[0];
+    const img = images.get(poseFile(deviceId, color, p));
+    return img ? { img, geo: device.poseGeometry[p] } : null;
   }
   const img = images.get(phoneFile(deviceId, color));
   return img ? { img, geo: device.geometry } : null;
