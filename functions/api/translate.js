@@ -68,7 +68,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   const month = new Date().toISOString().slice(0, 7);
-  const limit = Number(env.TRANSLATION_RUNS_PER_MONTH || 100);
+  const limit = Number(env.TRANSLATION_RUNS_PER_MONTH || 500);
   const used = (await env.DB.prepare('SELECT runs FROM translation_usage WHERE key_hash = ?1 AND month = ?2').bind(keyHash, month).first())?.runs ?? 0;
   if (used + targetLanguages.length > limit) {
     return json({ error: `Monthly translation allowance reached (${used} of ${limit} languages used). It resets on the 1st.`, usage: { runs: used, limit } }, 429);

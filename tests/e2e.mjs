@@ -72,15 +72,16 @@ try {
     const ok = key === PRO_KEY && /^[0-9a-f-]{36}$/.test(device);
     await route.fulfill({ status: ok ? 200 : 404, json: { valid: ok, message: ok ? 'Pro unlocked. Thank you!' : 'That license key was not found.' } });
   });
-  let translateRequests = 0;
+  let translateRequests = 0, lastTranslate = null;
   await page.route('**/api/translate', async route => {
     translateRequests++;
     const body = route.request().postDataJSON();
+    lastTranslate = body;
     if (body.key !== PRO_KEY) return route.fulfill({ status: 403, json: { error: 'Pro only' } });
     const de = { 'Built for the big screen': 'Gemacht für den großen Bildschirm', 'Everything you need, side by side on iPhone Duo.': 'Alles, was du brauchst – nebeneinander auf dem iPhone Duo.',
       'Pick up where you left off': 'Mach da weiter, wo du aufgehört hast', 'Fold or unfold — your place follows you.': 'Zu- oder aufgeklappt – deine Stelle folgt dir.' };
     const translations = Object.fromEntries(body.targetLanguages.map(l => [l, body.texts.map(t => (l === 'de' && de[t]) || `[${l}] ${t}`)]));
-    await route.fulfill({ json: { translations, failed: [], usage: { runs: body.targetLanguages.length, limit: 100 } } });
+    await route.fulfill({ json: { translations, failed: [], usage: { runs: body.targetLanguages.length, limit: 500 } } });
   });
 
   await page.goto(BASE + '/index.html');
@@ -188,6 +189,25 @@ try {
   await page.waitForFunction(() => ['de', 'ja'].every(l => window.__dss.state.langs.includes(l)));
   const deText = await page.evaluate(() => window.__dss.state.shots[1].text.de['duo/inner'].headline);
   check(deText === 'Mach da weiter, wo du aufgehört hast', `Translation applied: "${deText}"`);
+
+  // Translating again sends nothing when nothing changed, and after an edit only the changed line.
+  const before = translateRequests;
+  await page.check('#langChecks input[value="de"]');
+  await page.check('#langChecks input[value="ja"]');
+  await page.click('#translateBtn');
+  await page.waitForFunction(() => document.getElementById('translateStatus').textContent.includes('already up to date'));
+  check(translateRequests === before, 'Up-to-date languages are not sent again (and not counted)');
+  const edited = await page.evaluate(() => {
+    const s = window.__dss.state.shots[0], k = Object.keys(s.text.en)[0];
+    s.text.en[k] = { ...s.text.en[k], headline: 'Fresh headline' };
+    return k;
+  });
+  await page.check('#langChecks input[value="de"]');
+  await page.click('#translateBtn');
+  await page.waitForFunction((n) => window.__dss && document.getElementById('translateStatus').textContent.includes('Translated 1 line'), before);
+  check(translateRequests === before + 1 && JSON.stringify(lastTranslate.texts) === '["Fresh headline"]', `Only the changed line is sent: ${JSON.stringify(lastTranslate.texts)}`);
+  const after = await page.evaluate((k) => ({ h: window.__dss.state.shots[0].text.de[k].headline, other: window.__dss.state.shots[1].text.de['duo/inner'].headline }), edited);
+  check(after.h === '[de] Fresh headline' && after.other === 'Mach da weiter, wo du aufgehört hast', 'The edit is translated and the other lines are kept');
   await page.keyboard.press('Escape');
   check(await page.$$eval('.lang-row', rs => rs.map(r => r.dataset.lang).join()) === 'en,de,ja', 'Board shows a row per language');
 

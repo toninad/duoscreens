@@ -125,7 +125,7 @@ Both accept calls only from the app's own origin and are rate-limited per IP.
 | Variable `POLAR_ORGANIZATION_ID` | your Polar organization ID |
 | Variable `POLAR_BENEFIT_ID` | optional: only keys from this benefit unlock |
 | Variable `ALLOWED_ORIGIN` | `https://studio.hearhere.media` |
-| Variable `TRANSLATION_RUNS_PER_MONTH` | optional, default `100` |
+| Variable `TRANSLATION_RUNS_PER_MONTH` | optional, default `500` (one = all changed lines into one language) |
 | Variable `ANTHROPIC_MODEL` | optional, default `claude-haiku-5-5` |
 | Secret `POLAR_ACCESS_TOKEN` | Polar organization token with `license_keys:read`, `license_keys:write`, `checkouts:read` and `customer_sessions:write` |
 | Secret `ANTHROPIC_API_KEY` | Anthropic API key (use a separate workspace with a spend limit) |

@@ -495,7 +495,7 @@ function duplicateShot(id) {
   if (countOn(g, t.id) >= MAX_SHOTS) return toast(`${targetLabel(t)} has its ${MAX_SHOTS} screenshots, the App Store maximum.`);
   const i = g.shots.findIndex(s => s.id === id);
   const s = g.shots[i];
-  const copy = { ...s, id: nextId++, text: structuredClone(s.text), style: { ...(s.style || {}) } };
+  const copy = { ...s, id: nextId++, text: structuredClone(s.text), tsrc: structuredClone(s.tsrc || {}), style: { ...(s.style || {}) } };
   g.shots.splice(i + 1, 0, copy);
   state.selection = new Set([copy.id]);
   refresh();
@@ -1125,29 +1125,65 @@ function setupTranslate() {
     if (!state.licensed) { $('langPop').hidePopover(); $('licensePop').showPopover(); return; }
     if (!state.shots.length) return toast('Add screenshots first.');
     const targets = selectedTargets();
-    if (targets.length > 12) { $('translateStatus').textContent = 'Pick up to 12 languages at a time.'; return; }
-    // Every screen's words, in order; the answer comes back in the same order.
-    const slots = state.shots.flatMap(s => screensOf(s).map(screen => ({ s, screen })));
-    const texts = slots.flatMap(({ s, screen }) => { const t = textFor(s, state.baseLang, screen); return [t.headline, t.subheadline]; });
-    $('translateBtn').disabled = true;
-    $('translateStatus').textContent = `Translating into ${targets.length} language${targets.length > 1 ? 's' : ''}…`;
-    try {
-      const { translations, failed, usage } = await translateTexts(texts, targets, state.baseLang, storedLicenseKey());
-      for (const [lang, out] of Object.entries(translations)) {
-        slots.forEach(({ s, screen }, i) => { s.text[lang] = { ...s.text[lang], [screen]: { headline: out[i * 2], subheadline: out[i * 2 + 1] } }; });
-        if (!state.langs.includes(lang)) state.langs.push(lang);
-      }
-      const added = Object.keys(translations);
-      renderLangChecks();
-      refresh({ fit: true });
-      const left = usage ? ` ${usage.limit - usage.runs} of ${usage.limit} left this month.` : '';
-      $('translateStatus').textContent = (added.length ? `Added ${added.map(langName).join(', ')}. Review the text: exports include every language.` : '')
-        + (failed.length ? ` Couldn't translate ${failed.map(langName).join(', ')}; try again.` : '') + left;
-    } catch (e) {
-      $('translateStatus').textContent = e.message;
-    } finally {
-      syncTranslateButton();
+    // Every screen's words in the base language. Each translation remembers the words it was made
+    // from (shot.tsrc), so translating again only sends lines that changed since, and a language that's
+    // already up to date costs nothing. Hand edits to lines that didn't change are kept.
+    const slots = state.shots.flatMap(s => screensOf(s).map(screen => ({ s, screen, base: textFor(s, state.baseLang, screen) })));
+    const FIELDS = ['headline', 'subheadline'];
+    const changed = (lang) => slots.flatMap(({ s, screen, base }, i) => FIELDS
+      .filter(f => base[f] && (s.text[lang]?.[screen]?.[f] == null || s.tsrc?.[lang]?.[screen]?.[f] !== base[f]))
+      .map(f => [i, f]));
+    const put = (lang, i, f, value) => {
+      const { s, screen, base } = slots[i];
+      s.text[lang] = { ...s.text[lang], [screen]: { headline: '', subheadline: '', ...s.text[lang]?.[screen], [f]: value } };
+      s.tsrc = { ...s.tsrc, [lang]: { ...s.tsrc?.[lang], [screen]: { ...s.tsrc?.[lang]?.[screen], [f]: base[f] } } };
+    };
+    // Languages that need the same lines go together, up to 12 per request.
+    const batches = new Map();
+    const upToDate = [];
+    for (const lang of targets) {
+      const need = changed(lang);
+      // Empty lines need no translating: mirror them so the language is complete.
+      slots.forEach(({ base }, i) => FIELDS.forEach(f => { if (!base[f]) put(lang, i, f, ''); }));
+      if (!need.length) { upToDate.push(lang); continue; }
+      const k = JSON.stringify(need);
+      if (!batches.has(k)) batches.set(k, { need, langs: [] });
+      batches.get(k).langs.push(lang);
     }
+    const requests = [...batches.values()].flatMap(({ need, langs }) => {
+      const out = [];
+      for (let i = 0; i < langs.length; i += 12) out.push({ need, langs: langs.slice(i, i + 12) });
+      return out;
+    });
+    $('translateBtn').disabled = true;
+    const done = [], failed = [];
+    let usage, lines = 0, error = '';
+    try {
+      for (const [n, { need, langs }] of requests.entries()) {
+        $('translateStatus').textContent = `Translating${requests.length > 1 ? ` (${n + 1} of ${requests.length})` : ''}…`;
+        const res = await translateTexts(need.map(([i, f]) => slots[i].base[f]), langs, state.baseLang, storedLicenseKey());
+        for (const [lang, out] of Object.entries(res.translations)) {
+          need.forEach(([i, f], j) => put(lang, i, f, out[j]));
+          done.push(lang);
+        }
+        failed.push(...res.failed);
+        lines = Math.max(lines, need.length);
+        usage = res.usage;
+      }
+    } catch (e) {
+      error = e.message;
+    }
+    for (const lang of [...done, ...upToDate]) if (!state.langs.includes(lang)) state.langs.push(lang);
+    renderLangChecks();
+    refresh({ fit: true });
+    const left = usage ? ` ${usage.limit - usage.runs} of ${usage.limit} left this month.` : '';
+    $('translateStatus').textContent = [
+      done.length && `Translated ${lines} line${lines > 1 ? 's' : ''} into ${done.map(langName).join(', ')}. Review the text: exports include every language.`,
+      upToDate.length && `${upToDate.map(langName).join(', ')} already up to date (not counted).`,
+      failed.length && `Couldn't translate ${failed.map(langName).join(', ')}; try again.`,
+      error,
+    ].filter(Boolean).join(' ') + left;
+    syncTranslateButton();
   };
 }
 

@@ -21,7 +21,7 @@
     "ALLOWED_ORIGIN": "https://studio.hearhere.media",
     "POLAR_ORGANIZATION_ID": "35b48af0-b858-4962-a867-599c50c2167b",
     "POLAR_BENEFIT_ID": "c1ac5b59-0307-4ba3-83ac-18199cc3ea06",
-    "TRANSLATION_RUNS_PER_MONTH": "100"
+    "TRANSLATION_RUNS_PER_MONTH": "500"
   },
   "observability": { "enabled": true }
 }
