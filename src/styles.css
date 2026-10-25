@@ -1255,3 +1255,45 @@ input:disabled + .lang-box { opacity: .4; }
   .device-dialog .tile-sketch { background: radial-gradient(120% 90% at 50% 0%, #3a3633, #211f1d); }
 }
 @media (max-width: 560px) { .device-dialog .tile-sketch { height: 112px; } }
+
+/* Pro flyout: a hero with the price, four plain benefits, one button; the key entry tucked below. */
+.pro-pop { width: 344px; }
+.pro-card { border-radius: 22px; padding: 0; overflow: hidden; }
+.pro-hero {
+  position: relative; padding: 22px 22px 18px;
+  background: radial-gradient(140% 120% at 100% 0%, color-mix(in srgb, var(--orange) 16%, transparent), transparent 60%);
+}
+.pro-chip { display: inline-block; padding: 3px 9px; border-radius: 999px; font: 700 10.5px/1.3 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--orange); background: color-mix(in srgb, var(--orange) 13%, transparent); }
+.pro-chip.on { color: #fff; background: var(--orange); }
+.pro-title { margin: 10px 0 0; font: 500 30px/1.05 var(--serif); letter-spacing: -.02em; color: var(--ink); }
+.pro-title .dot { color: var(--orange); }
+.pro-price { margin: 10px 0 0; display: flex; align-items: baseline; gap: 8px; }
+.pro-price #proPrice { font-size: 22px; font-weight: 700; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.pro-once { font-size: 13px; color: var(--muted); }
+.pro-sub { margin: 8px 0 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+.pro-features { list-style: none; margin: 0; padding: 4px 22px 4px; display: flex; flex-direction: column; gap: 10px; }
+.pro-features li { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; line-height: 1.4; color: var(--muted); }
+.pro-features b { color: var(--ink); font-weight: 600; }
+.pro-features svg { flex: none; width: 18px; height: 18px; margin-top: 0; padding: 3px; border-radius: 50%; background: color-mix(in srgb, var(--orange) 13%, transparent); fill: none; stroke: var(--orange); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.pro-buy { padding: 18px 22px 4px; }
+.pro-buy .btn.buy { background: var(--orange); color: #fff; padding: 12px 16px; font-size: 15px; box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--orange) 90%, transparent); transition: transform .2s var(--ease), box-shadow .2s, filter .2s; }
+.pro-buy .btn.buy:hover { filter: brightness(1.05); transform: translateY(-1px); box-shadow: 0 12px 24px -10px color-mix(in srgb, var(--orange) 90%, transparent); }
+.pro-buy .buy-terms { margin: 10px 0 0; text-align: center; font-size: 11.5px; color: var(--muted); }
+.pro-key { margin: 14px 0 0; padding: 12px 22px 16px; border-top: 1px solid var(--hairline); }
+.pro-key summary { justify-content: center; font-size: 13px; font-weight: 600; color: var(--muted); min-height: 0; }
+.pro-key summary::-webkit-details-marker { display: none; }
+.pro-key summary:hover { color: var(--ink); }
+.pro-key[open] summary { margin-bottom: 10px; color: var(--ink); }
+.pro-key .inline { display: flex; gap: 8px; }
+.pro-key input { flex: 1; min-width: 0; height: 38px; padding: 0 12px; border: 0; border-radius: 11px; background: var(--fill); font: inherit; font-size: 13px; color: var(--ink); outline: 0; }
+.pro-key input:focus { box-shadow: 0 0 0 1.5px var(--orange); background: transparent; }
+.pro-status { margin: 0; padding: 0 22px 14px; font-size: 12.5px; line-height: 1.45; color: var(--muted); text-align: center; }
+.pro-status:empty { display: none; }
+.pro-section { margin: 0 14px 12px; padding: 12px 14px; border-radius: 14px; background: var(--fill); }
+.pro-section.sync-box { border-top: 0; margin-top: 0; }
+.pro-label { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.pro-section .key-row { margin: 0; }
+.pro-fine { margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.pro-foot { padding: 2px 22px 16px; text-align: center; }
+@media (prefers-color-scheme: dark) { .pro-buy .btn.buy { box-shadow: 0 8px 20px -10px rgba(254,89,25,.6); } }
+.pro-key summary { gap: 6px; }

@@ -1459,7 +1459,7 @@ function applyLicense(valid, message) {
   $('licenseBadge').textContent = valid ? 'Pro' : 'Get Pro';
   $('licenseBadge').title = valid ? 'HearHere Studio Pro: your license' : 'Free: exports carry a small watermark. Pro removes it and adds translation, more devices and sync.';
   $('licenseBadge').classList.toggle('pro', valid);
-  if (message) $('licenseStatus').textContent = message;
+  if (message) { $('licenseStatus').textContent = message; if (!valid) $('keyDetails').open = true; }
   syncTranslateButton();
   if ($('deviceDialog').open) renderDeviceList();
   if (valid) sync?.schedule(200);
@@ -1498,11 +1498,11 @@ function setupLicense() {
     history.replaceState(null, '', location.pathname);
     if (!checkoutId) {
       requestAnimationFrame(() => $('licensePop').showPopover());
-      $('licenseStatus').textContent = 'Thanks for buying Pro! Paste the license key from your receipt email.';
+      $('licenseStatus').textContent = 'Thanks for buying Pro! Paste the license key from your receipt email.'; $('keyDetails').open = true;
       return;
     }
     requestAnimationFrame(() => $('licensePop').showPopover());
-    $('licenseStatus').textContent = 'Thanks for buying Pro! Unlocking…';
+    $('licenseStatus').textContent = 'Thanks for buying Pro! Unlocking…'; $('keyDetails').open = true;
     $('licenseBtn').disabled = true;
     claimCheckout(checkoutId).then(r => {
       $('licenseBtn').disabled = false;

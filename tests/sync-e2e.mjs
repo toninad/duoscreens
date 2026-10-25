@@ -78,6 +78,7 @@ async function syncSwitch(page) {
 const state = (page, fn) => page.evaluate(fn);
 async function unlock(page) {
   await page.click('#licenseBadge');
+  if (!(await page.$('#keyDetails[open]'))) await page.click('#keyDetails summary');   // the key field sits behind "Have a license key?"
   await page.fill('#licenseKey', KEY);
   await page.click('#licenseBtn');
   await page.waitForFunction(() => window.__dss.state.licensed);

@@ -184,13 +184,15 @@ try {
 
   // Unlock: a wrong key stays locked, the Pro key unlocks
   await page.click('#licenseBadge');
-  check((await page.textContent('#buyBtn')).includes('€15.99'), 'Pro price shown');
+  check((await page.textContent('#proPrice')).includes('€15.99'), 'Pro price shown');
   check(await page.isHidden('#licenseActive'), 'Free: the Pro popover offers Pro, not "Pro is active"');
   check(await page.isVisible('.buy-terms a[href="/refunds"]'), 'Refund policy is linked next to the buy button');
+  if (!(await page.$('#keyDetails[open]'))) await page.click('#keyDetails summary');   // the key field sits behind "Have a license key?"
   await page.fill('#licenseKey', 'not-a-real-key');
   await page.click('#licenseBtn');
   await page.waitForFunction(() => /not found/.test(document.getElementById('licenseStatus').textContent));
   check(!(await page.evaluate(() => window.__dss.state.licensed)), 'Invalid key stays locked');
+  if (!(await page.$('#keyDetails[open]'))) await page.click('#keyDetails summary');   // the key field sits behind "Have a license key?"
   await page.fill('#licenseKey', PRO_KEY);
   await page.click('#licenseBtn');
   await page.waitForFunction(() => window.__dss.state.licensed === true);

@@ -185,36 +185,55 @@
     </div>
   </div>
 
-  <div id="licensePop" class="pop pop-down" popover>
-    <div class="card">
-      <div id="licenseForm" class="cell">
-        <div class="pop-title">HearHere Studio Pro</div>
-        <p class="hint pro-pitch">One-time purchase. No watermark, AI translation of your headlines into 39 languages, boards synced across your browsers (end-to-end encrypted), and future updates.</p>
-        <a id="buyBtn" class="btn primary buy" href="#" target="_blank" rel="noopener">Get Pro&nbsp;·&nbsp;<span id="proPrice"></span></a>
-        <p class="hint buy-terms">One-time purchase, VAT included. Full refund within 14 days, no questions asked. <a href="/terms" target="_blank">Terms</a> · <a href="/refunds" target="_blank">Refunds</a></p>
-        <div class="pop-title small">Already bought it?</div>
-        <div class="inline">
-          <input id="licenseKey" type="text" placeholder="License key from your email" autocomplete="off" spellcheck="false">
-          <button id="licenseBtn" class="btn small">Unlock</button>
+  <div id="licensePop" class="pop pop-down pro-pop" popover>
+    <div class="card pro-card">
+      <div id="licenseForm">
+        <header class="pro-hero">
+          <span class="pro-chip">Pro</span>
+          <h3 class="pro-title">Studio Pro<span class="dot">.</span></h3>
+          <p class="pro-price"><span id="proPrice"></span><span class="pro-once">once, yours to keep</span></p>
+        </header>
+        <ul class="pro-features">
+          <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.4l2.9 2.9 6.1-6.6"/></svg><span><b>No watermark</b> on any export</span></li>
+          <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.4l2.9 2.9 6.1-6.6"/></svg><span><b>Translate headlines</b> into 39 languages</span></li>
+          <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.4l2.9 2.9 6.1-6.6"/></svg><span><b>Every device on one board</b>: iPhone, Duo, iPad and Mac</span></li>
+          <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.4l2.9 2.9 6.1-6.6"/></svg><span><b>Sync boards</b> across browsers, end-to-end encrypted</span></li>
+        </ul>
+        <div class="pro-buy">
+          <a id="buyBtn" class="btn primary buy" href="#" target="_blank" rel="noopener">Get Pro</a>
+          <p class="buy-terms">VAT included · <a href="/refunds" target="_blank">14-day refund</a>, no questions asked · <a href="/terms" target="_blank">Terms</a></p>
         </div>
-        <p id="licenseStatus" class="hint"></p>
+        <details id="keyDetails" class="pro-key">
+          <summary>Have a license key?</summary>
+          <div class="inline">
+            <input id="licenseKey" type="text" placeholder="Paste it from your receipt email" autocomplete="off" spellcheck="false">
+            <button id="licenseBtn" class="btn small">Unlock</button>
+          </div>
+        </details>
+        <p id="licenseStatus" class="pro-status" role="status" aria-live="polite"></p>
       </div>
-      <div id="licenseActive" class="cell" hidden>
-        <div class="pop-title">Pro is active<span class="dot">.</span></div>
-        <p class="hint pro-pitch">No watermark, translation is unlocked, and your boards sync across your browsers. Pro is saved in this browser.</p>
-        <div class="key-row">
-          <code id="activeKey" class="key-code"></code>
-          <button id="activeCopy" class="btn small copy-btn" type="button"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="2"/><path d="M13 4.5V4a1.5 1.5 0 0 0-1.5-1.5h-6A1.5 1.5 0 0 0 4 4v8a1.5 1.5 0 0 0 1.5 1.5H6"/></svg>Copy</button>
+      <div id="licenseActive" hidden>
+        <header class="pro-hero">
+          <span class="pro-chip on">Pro</span>
+          <h3 class="pro-title">You're Pro<span class="dot">.</span></h3>
+          <p class="pro-sub">Everything is unlocked. Thank you for supporting Studio.</p>
+        </header>
+        <div class="pro-section">
+          <div class="pro-label">License key</div>
+          <div class="key-row">
+            <code id="activeKey" class="key-code"></code>
+            <button id="activeCopy" class="btn small copy-btn" type="button"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="2"/><path d="M13 4.5V4a1.5 1.5 0 0 0-1.5-1.5h-6A1.5 1.5 0 0 0 4 4v8a1.5 1.5 0 0 0 1.5 1.5H6"/></svg>Copy</button>
+          </div>
+          <p class="pro-fine">Works on up to 3 devices. It's also in your receipt email.</p>
         </div>
-        <p class="hint">Use the same key on up to 3 devices. It's also in your receipt email.</p>
-        <div id="syncBox" class="sync-box">
+        <div id="syncBox" class="pro-section sync-box">
           <button id="syncToggle" class="menu-row sync-toggle" type="button" aria-pressed="false">
             <span class="switch" aria-hidden="true"></span><span>Sync boards across browsers</span>
           </button>
           <p id="syncNote" class="sync-note"></p>
           <button id="syncDelete" class="link-btn danger" type="button">Delete synced data</button>
         </div>
-        <button id="forgetBtn" class="link-btn" type="button">Remove from this browser</button>
+        <footer class="pro-foot"><button id="forgetBtn" class="link-btn" type="button">Remove Pro from this browser</button></footer>
       </div>
     </div>
   </div>
