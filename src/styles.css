@@ -1008,3 +1008,25 @@ body { display: block; height: 100dvh; }
   .side-meta { display: none; }
 }
 @media (max-width: 860px) { .zoom-tools { bottom: calc(78px + env(safe-area-inset-bottom)); right: 10px; } }
+
+/* Desktop: one floating card on the left. The brand and Add screenshots head it, then devices and languages. */
+@media (min-width: 861px) {
+  .side-panel { top: 16px; max-height: calc(100% - 16px - 110px); width: 232px; padding: 6px 8px 8px; }
+  .side-panel .top-left {
+    height: auto; padding: 0; margin: 0 0 4px; background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+    display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+  }
+  .side-panel .top-left .brand { height: 44px; padding: 0 10px; margin: 0; border: 0; border-bottom: 1px solid var(--hairline); border-radius: 0; margin-bottom: 6px; }
+  .side-panel .board-tools { flex-direction: column; align-items: stretch; gap: 1px; }
+  .side-panel .board-tools .board-add, .side-panel .board-tools .board-link {
+    width: 100%; justify-content: flex-start; height: 34px; padding: 0 10px; border-radius: 10px; font-size: 13.5px;
+  }
+  .side-panel .board-tools .board-add { background: var(--card); }
+  .side-panel .board-tools .board-add:hover { background: color-mix(in srgb, var(--ink) 8%, var(--card)); }
+  .side-panel .board-tools .board-link { font-weight: 500; }
+  .side-panel .board-tools .board-add + .board-link { margin-top: 1px; }
+}
+.side-panel:not(.ready) .side-title { display: none; }
+@media (max-width: 860px) { .side-panel:not(.ready) { display: none; } }
+@media (min-width: 861px) { .topbar .top-center { grid-column: 2; } .topbar .topbar-actions { grid-column: 3; } }
+@media (min-width: 861px) { .side-panel .top-left .brand { border-right: 0; padding-right: 10px; margin-right: 0; } }

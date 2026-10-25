@@ -276,7 +276,7 @@ function fitBoard() {
   const top = narrow ? 118 : 100, bottom = narrow ? 92 : 104, side = narrow ? 16 : 48;
   // Names above, captions below and the round + beside the cards keep their screen size outside
   // the measured layout, so leave room for them.
-  const panelW = narrow ? 0 : 236;   // the floating side panel
+  const panelW = narrow ? 0 : 256;   // the floating side panel
   const plusW = narrow ? 0 : 70, langW = focus.compare && state.langs.length > 1 && !narrow ? 100 : 0, nameH = 40, capH = narrow ? 90 : 30;
   const bw = board.clientWidth - side * 2 - plusW - langW - panelW, bh = board.clientHeight - top - bottom - nameH - capH;
   // The board's labels keep their screen size, so the world's size depends on the zoom: settle it.
@@ -423,6 +423,7 @@ function buildStructure() {
 function renderSidePanel() {
   const nav = $('deviceNav'), langNav = $('langNav');
   nav.innerHTML = ''; langNav.innerHTML = '';
+  $('sidePanel').classList.add('ready');
   const row = (label, meta, current, onclick, cls = '') => {
     const b = el('button', `side-row ${cls}`, '<span class="side-name"></span><span class="side-meta"></span>');
     b.type = 'button';
@@ -521,7 +522,7 @@ function renderBoard({ fit = false } = {}) {
   for (const g of state.groups) if (!g.shots.length) g.shots.push(newShot(g));   // every group has a card to fill
   const has = true;
   $('empty').hidden = true;
-  for (const id of ['board', 'dock', 'boardTools', 'zoomTools', 'scopeLabel', 'sidePanel']) $(id).hidden = !has;
+  for (const id of ['board', 'dock', 'boardTools', 'zoomTools', 'scopeLabel']) $(id).hidden = !has;
   $('exportBtn').disabled = !state.shots.some(hasAnyImage);
   $('sampleBtn').hidden = state.shots.some(hasAnyImage);
   $('langLabel').textContent = state.langs.length > 1 ? `${state.langs.length} languages` : 'Translate';
@@ -1436,6 +1437,12 @@ async function boot() {
   syncToolbar();
   setupDropzone();
   setupTranslate();
+  // Desktop: the brand and Add screenshots head the side panel, as one floating card. Phones: they
+  // stay in the top bar, and the panel is a strip of chips under it.
+  const narrowMq = matchMedia('(max-width: 860px)');
+  const placeBrand = () => (narrowMq.matches ? document.querySelector('.topbar').prepend($('brandBox')) : $('sidePanel').prepend($('brandBox')));
+  placeBrand();
+  narrowMq.addEventListener('change', placeBrand);
   setupLicense();
   $('exportBtn').onclick = exportZip;
   refresh({ fit: true });
