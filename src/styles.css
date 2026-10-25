@@ -379,7 +379,6 @@ input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border: 0; bord
 .lang-check:hover { background: var(--fill); }
 .lang-check span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lang-check input { accent-color: var(--ink); margin: 0; flex: none; }
-.lang-check.done span::after { content: ' ✓'; color: var(--orange); }
 #translateCount { font-size: 13px; flex: 1; }
 
 /* Pro active and welcome */
@@ -1121,3 +1120,67 @@ html.booting body { opacity: 0; animation: boot-reveal 0s 4s forwards; }
 body { transition: opacity .18s ease; }
 @keyframes boot-reveal { to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { body { transition: none; } }
+
+/* Language picker: opens out of "Add languages" (beside the side panel), with search, Select all and a
+   sticky footer. Placed by placeLangPicker(); --arrow-y points the nub at the row it came from. */
+.lang-pop { width: 340px; }
+.lang-pop .card.lang-card { display: flex; flex-direction: column; max-height: min(560px, calc(100vh - 24px)); border-radius: 18px; overflow: hidden; }
+.lang-pop[data-from=side] { transform-origin: 0 var(--arrow-y, 40px); }
+.lang-pop[data-from=top] { transform-origin: 50% 0; }
+.lang-pop:popover-open { animation: lang-in .32s var(--ease); }
+.lang-pop[data-from=side]:popover-open { animation-name: lang-in-side; }
+@keyframes lang-in { from { opacity: 0; transform: translateY(-6px) scale(.97); } }
+@keyframes lang-in-side { from { opacity: 0; transform: translateX(-10px) scale(.96); } }
+@media (prefers-reduced-motion: reduce) { .lang-pop:popover-open { animation: none; } }
+.lang-pop[data-from=side]::before {   /* the nub, pointing back at the panel */
+  content: ''; position: absolute; left: -6px; top: calc(var(--arrow-y, 40px) - 6px); width: 12px; height: 12px; transform: rotate(45deg);
+  background: var(--paper); border-left: 1px solid var(--chrome-border); border-bottom: 1px solid var(--chrome-border); z-index: 1;
+}
+@media (prefers-color-scheme: dark) { .lang-pop[data-from=side]::before { background: #2a2725; } }
+
+.lang-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 14px 10px 18px; }
+.lang-head > div { flex: 1; min-width: 0; }
+.lang-title { font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
+.lang-title .pro-tag[hidden] { display: none; }
+.lang-sub { margin: 4px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--muted); }
+.lang-close { width: 28px; height: 28px; margin: -4px -2px 0 0; border: 0; border-radius: 50%; padding: 0; display: grid; place-items: center; background: transparent; color: var(--muted); cursor: pointer; flex: none; }
+.lang-close:hover { background: var(--fill); color: var(--ink); }
+.lang-close svg { width: 13px; height: 13px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; fill: none; }
+
+.lang-search { display: flex; align-items: center; gap: 8px; margin: 0 14px 6px; height: 36px; padding: 0 12px; border-radius: 11px; background: var(--fill); cursor: text; transition: box-shadow .2s; }
+.lang-search:focus-within { box-shadow: 0 0 0 1.5px var(--orange); background: transparent; }
+.lang-search svg { width: 14px; height: 14px; stroke: var(--muted); stroke-width: 1.6; fill: none; stroke-linecap: round; flex: none; }
+.lang-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; font-size: 13.5px; color: var(--ink); padding: 0; }
+.lang-search input::-webkit-search-cancel-button { display: none; }
+
+/* Rows: a soft custom checkbox, the name, and the code (or "Update") on the right. */
+.lang-check, .lang-all { position: relative; display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 10px; border-radius: 10px; font-size: 13.5px; cursor: pointer; }
+.lang-check:hover, .lang-all:hover { background: var(--fill); }
+.lang-check input, .lang-all input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.lang-box { width: 18px; height: 18px; border-radius: 6px; flex: none; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 24%, transparent); display: grid; place-items: center; transition: background .15s, box-shadow .15s; }
+.lang-box::after { content: ''; width: 9px; height: 5px; margin-top: -2px; border-left: 2px solid var(--paper); border-bottom: 2px solid var(--paper); transform: rotate(-45deg) scale(.4); opacity: 0; transition: transform .2s var(--ease), opacity .15s; }
+input:checked + .lang-box { background: var(--orange); box-shadow: none; }
+input:checked + .lang-box::after { opacity: 1; transform: rotate(-45deg) scale(1); }
+input:indeterminate + .lang-box { background: var(--orange); box-shadow: none; }
+input:indeterminate + .lang-box::after { width: 8px; height: 0; margin: 0; border-left: 0; border-bottom-width: 2px; transform: none; opacity: 1; }
+input:focus-visible + .lang-box { outline: 2px solid var(--orange); outline-offset: 2px; }
+input:disabled + .lang-box { opacity: .4; }
+.lang-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lang-code { font-size: 11px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.lang-check.done .lang-code { color: var(--orange); }
+.lang-all { margin: 0 4px; font-weight: 600; }
+.lang-all > span:nth-of-type(2) { flex: 1; }
+
+.lang-checks { display: block; flex: 1; min-height: 0; max-height: none; overflow-y: auto; margin: 0; padding: 0 4px 8px; border-top: 1px solid var(--hairline); scrollbar-width: thin; overscroll-behavior: contain; }
+.lang-section { position: sticky; top: 0; z-index: 1; padding: 10px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); background: var(--paper); }
+@media (prefers-color-scheme: dark) { .lang-section { background: #2a2725; } }
+.lang-empty { margin: 18px 10px; text-align: center; color: var(--muted); font-size: 13px; }
+
+.lang-foot { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 18px; border-top: 1px solid var(--hairline); }
+.lang-count { flex: 1; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lang-foot .btn.primary { border-radius: 999px; padding: 8px 16px; }
+.lang-foot .btn.primary:disabled { opacity: .35; }
+.lang-status { margin: 0; padding: 0 18px 12px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.lang-status:empty { display: none; }
+@media (max-width: 860px) { .lang-pop { width: min(380px, calc(100vw - 20px)); } }
+.lang-head, .lang-search, .lang-all, .lang-foot, .lang-status { flex: none; }

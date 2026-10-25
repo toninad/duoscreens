@@ -32,7 +32,7 @@
     </div>
     <div class="top-center"><span id="scopeLabel" class="scope-chip" title="Toolbar changes apply to this. Click a screenshot to change only that one; click the background for all.">All screenshots</span></div>
     <div class="topbar-actions">
-      <button id="langBtn" class="pill-btn" popovertarget="langPop" title="Language and translation">
+      <button id="langBtn" class="pill-btn" type="button" title="Language and translation" aria-haspopup="dialog">
         <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.2"/><path d="M2.8 10h14.4M10 2.8c2 2 2.9 4.4 2.9 7.2S12 15.2 10 17.2C8 15.2 7.1 12.8 7.1 10S8 4.8 10 2.8z"/></svg>
         <span id="langLabel">English</span>
       </button>
@@ -148,17 +148,29 @@
     </footer>
   </dialog>
 
-  <div id="langPop" class="pop pop-down" popover>
-    <div class="card">
-      <div class="cell">
-        <div class="pop-title">Translate headlines <span class="pro-tag">Pro</span></div>
-        <div id="langChecks" class="lang-checks" role="group" aria-label="Languages to translate into"></div>
-        <div class="inline">
-          <span id="translateCount" class="muted">Pick languages</span>
-          <button id="translateBtn" class="btn primary small" disabled>Translate</button>
+  <div id="langPop" class="pop lang-pop" popover role="dialog" aria-labelledby="langPopTitle">
+    <div class="card lang-card">
+      <header class="lang-head">
+        <div>
+          <div id="langPopTitle" class="lang-title">Add languages <span id="langPro" class="pro-tag">Pro</span></div>
+          <p id="langSub" class="lang-sub">Headlines are translated from English. You can edit every line after.</p>
         </div>
-        <p id="translateStatus" class="hint"></p>
-      </div>
+        <button id="langClose" class="icon-btn lang-close" type="button" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+      </header>
+      <label class="lang-search">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+        <input id="langSearch" type="search" placeholder="Search languages" autocomplete="off" spellcheck="false" aria-label="Search languages">
+      </label>
+      <label class="lang-all">
+        <input id="langAll" type="checkbox"><span class="lang-box" aria-hidden="true"></span>
+        <span>Select all</span><span id="langAllCount" class="lang-code"></span>
+      </label>
+      <div id="langChecks" class="lang-checks" role="group" aria-label="Languages to translate into"></div>
+      <footer class="lang-foot">
+        <span id="translateCount" class="lang-count">Pick languages</span>
+        <button id="translateBtn" class="btn primary small" disabled>Translate</button>
+      </footer>
+      <p id="translateStatus" class="lang-status" role="status" aria-live="polite"></p>
     </div>
   </div>
 

@@ -149,10 +149,26 @@ try {
   await page.click('[data-template="paper"]');
   await page.click('[data-layout="peek-left"]');
 
+  // The language picker opens out of "Add languages", beside the side panel; search narrows it and
+  // Select all takes what's listed. A second click on the row closes it.
+  await page.click('#langNav .side-add');
+  await page.waitForSelector('#langPop:popover-open');
+  const [panelBox, popBox] = [await page.locator('#sidePanel').boundingBox(), await page.locator('#langPop').boundingBox()];
+  check(popBox.x >= panelBox.x + panelBox.width && popBox.x - (panelBox.x + panelBox.width) < 24, 'The language picker opens beside the side panel');
+  await page.fill('#langSearch', 'span');
+  await page.click('.lang-all');
+  check(await page.evaluate(() => [...document.querySelectorAll('#langChecks input:checked')].map(i => i.value).join()) === 'es,es-MX', 'Search narrows the list and Select all picks what it shows');
+  check((await page.textContent('#translateCount')) === '2 selected', 'The footer counts the selection');
+  await page.click('.lang-all');
+  check(await page.$$eval('#langChecks input:checked', l => l.length) === 0, 'Select all again clears them');
+  await page.click('#langNav .side-add');
+  await page.waitForTimeout(150);
+  check(!(await page.evaluate(() => document.querySelector('#langPop').matches(':popover-open'))), 'A second click on Add languages closes the picker');
+
   // Translation is Pro only: without a license the button offers Pro instead of calling the server.
   await page.click('#langBtn');
-  await page.check('#langChecks input[value="de"]');
-  await page.check('#langChecks input[value="ja"]');
+  await page.check('#langChecks label:has(input[value="de"])');
+  await page.check('#langChecks label:has(input[value="ja"])');
   check((await page.textContent('#translateBtn')).includes('Get Pro'), 'Translate asks for Pro while unlicensed');
   await page.click('#translateBtn');
   check(await page.isVisible('#licensePop') && translateRequests === 0, 'Translate opens the Pro popover without calling the server');
@@ -183,8 +199,8 @@ try {
 
   // Translate into German and Japanese in one go
   await page.click('#langBtn');
-  await page.check('#langChecks input[value="de"]');
-  await page.check('#langChecks input[value="ja"]');
+  await page.check('#langChecks label:has(input[value="de"])');
+  await page.check('#langChecks label:has(input[value="ja"])');
   await page.click('#translateBtn');
   await page.waitForFunction(() => ['de', 'ja'].every(l => window.__dss.state.langs.includes(l)));
   const deText = await page.evaluate(() => window.__dss.state.shots[1].text.de['duo/inner'].headline);
@@ -192,8 +208,8 @@ try {
 
   // Translating again sends nothing when nothing changed, and after an edit only the changed line.
   const before = translateRequests;
-  await page.check('#langChecks input[value="de"]');
-  await page.check('#langChecks input[value="ja"]');
+  await page.check('#langChecks label:has(input[value="de"])');
+  await page.check('#langChecks label:has(input[value="ja"])');
   await page.click('#translateBtn');
   await page.waitForFunction(() => document.getElementById('translateStatus').textContent.includes('already up to date'));
   check(translateRequests === before, 'Up-to-date languages are not sent again (and not counted)');
@@ -202,7 +218,7 @@ try {
     s.text.en[k] = { ...s.text.en[k], headline: 'Fresh headline' };
     return k;
   });
-  await page.check('#langChecks input[value="de"]');
+  await page.check('#langChecks label:has(input[value="de"])');
   await page.click('#translateBtn');
   await page.waitForFunction((n) => window.__dss && document.getElementById('translateStatus').textContent.includes('Translated 1 line'), before);
   check(translateRequests === before + 1 && JSON.stringify(lastTranslate.texts) === '["Fresh headline"]', `Only the changed line is sent: ${JSON.stringify(lastTranslate.texts)}`);

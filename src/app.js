@@ -468,7 +468,7 @@ function renderSidePanel() {
   }
   const tr = el('button', 'side-row side-add', `${PLUS}<span>Add languages</span>${state.licensed ? '' : '<span class="pro-tag">Pro</span>'}`);
   tr.type = 'button';
-  tr.onclick = () => $('langPop').showPopover();
+  tr.onclick = () => openLangPicker(tr);
   langNav.appendChild(tr);
 }
 
@@ -1187,18 +1187,73 @@ function setupDevice(available) {
 // ---------- Translate (Pro) ----------
 const langName = (code) => LANGUAGES.find(l => l[0] === code)?.[1] || code;
 
+// The picker opens out of whatever opened it: beside the side panel's "Add languages" row on desktop,
+// under the panel strip on phones, under the top bar's button otherwise.
+let langAnchor = null, langClosedAt = 0;
+function openLangPicker(anchor) {
+  const pop = $('langPop');
+  // A second click on the same opener closes it (light dismiss may already have, on pointerdown).
+  if (pop.matches(':popover-open')) return pop.hidePopover();
+  if (langAnchor && (langAnchor.id || langAnchor.className) === (anchor.id || anchor.className) && performance.now() - langClosedAt < 250) return;   // the panel re-renders its rows, so compare by kind
+  langAnchor = anchor;
+  $('langSearch').value = '';
+  $('translateStatus').textContent = '';
+  renderLangChecks();
+  pop.showPopover();
+  placeLangPicker();
+  if (matchMedia('(pointer: fine)').matches) $('langSearch').focus({ preventScroll: true });
+}
+
+function placeLangPicker() {
+  const pop = $('langPop');
+  if (!pop.matches(':popover-open') || !langAnchor) return;
+  const r = langAnchor.getBoundingClientRect(), panel = $('sidePanel').getBoundingClientRect();
+  const w = pop.offsetWidth, h = pop.offsetHeight, m = 12;
+  let left, top, from;
+  if (langAnchor.closest('#sidePanel') && !narrowMq.matches) {   // beside the panel, level with the row
+    left = panel.right + 10; top = r.top - 14; from = 'side';
+  } else if (langAnchor.closest('#sidePanel')) {   // phones: below the strip of chips
+    left = (innerWidth - w) / 2; top = panel.bottom + 8; from = 'top';
+  } else {
+    left = r.right - w; top = r.bottom + 8; from = 'top';
+  }
+  left = Math.max(m, Math.min(left, innerWidth - w - m));
+  top = Math.max(m, Math.min(top, innerHeight - h - m));
+  Object.assign(pop.style, { left: `${left}px`, top: `${top}px` });
+  pop.dataset.from = from;
+  // The arrow points at the row it came from, while it's in reach.
+  pop.style.setProperty('--arrow-y', `${Math.max(18, Math.min(h - 18, r.top + r.height / 2 - top))}px`);
+}
+
 function renderLangChecks() {
   const box = $('langChecks');
+  const q = $('langSearch').value.trim().toLowerCase();
+  const picked = new Set(selectedTargets());
   box.innerHTML = '';
-  for (const [code, name] of LANGUAGES) {
-    if (code === state.baseLang) continue;
-    const l = document.createElement('label');
-    l.className = 'lang-check' + (state.langs.includes(code) ? ' done' : '');
-    l.innerHTML = '<input type="checkbox"><span></span>';
-    l.querySelector('input').value = code;
-    l.querySelector('span').textContent = name;
-    box.appendChild(l);
-  }
+  const base = langName(state.baseLang);
+  $('langSub').textContent = `Headlines are translated from ${base}. You can edit every line after.`;
+  $('langPro').hidden = state.licensed;
+  const match = ([code, name]) => code !== state.baseLang && (!q || name.toLowerCase().includes(q) || code.toLowerCase().startsWith(q));
+  const onBoard = LANGUAGES.filter(l => match(l) && state.langs.includes(l[0]));
+  const rest = LANGUAGES.filter(l => match(l) && !state.langs.includes(l[0]));
+  const section = (title, list, done) => {
+    if (!list.length) return;
+    box.appendChild(el('div', 'lang-section', title));
+    for (const [code, name] of list) {
+      const l = el('label', 'lang-check' + (done ? ' done' : ''));
+      l.innerHTML = '<input type="checkbox"><span class="lang-box" aria-hidden="true"></span><span class="lang-name"></span><span class="lang-code"></span>';
+      const input = l.querySelector('input');
+      input.value = code;
+      input.checked = picked.has(code);
+      l.querySelector('.lang-name').textContent = name;
+      l.querySelector('.lang-code').textContent = done ? 'Update' : code;
+      if (done) l.title = 'Translates only the lines that changed since';
+      box.appendChild(l);
+    }
+  };
+  section('On this board', onBoard, true);
+  section(onBoard.length ? 'Add' : 'Languages', rest, false);
+  if (!onBoard.length && !rest.length) box.appendChild(el('p', 'lang-empty', `No language matches “${$('langSearch').value.trim()}”.`));
   syncTranslateButton();
 }
 
@@ -1207,15 +1262,28 @@ function selectedTargets() {
 }
 
 function syncTranslateButton() {
-  const n = selectedTargets().length;
-  $('translateCount').textContent = n ? `${n} language${n > 1 ? 's' : ''}` : 'Pick languages';
+  const boxes = [...$('langChecks').querySelectorAll('input')];
+  const n = boxes.filter(i => i.checked).length;
+  const all = $('langAll');
+  all.checked = boxes.length > 0 && n === boxes.length;
+  all.indeterminate = n > 0 && n < boxes.length;
+  all.disabled = !boxes.length;
+  $('langAllCount').textContent = String(boxes.length);
+  $('translateCount').textContent = n ? `${n} selected` : 'Pick languages';
   $('translateBtn').disabled = !n;
-  $('translateBtn').textContent = state.licensed ? 'Translate' : 'Get Pro to translate';
+  $('translateBtn').textContent = !state.licensed ? 'Get Pro to translate' : n ? `Translate ${n}` : 'Translate';
 }
 
 function setupTranslate() {
   renderLangChecks();
   $('langChecks').onchange = syncTranslateButton;
+  $('langAll').onchange = (e) => { for (const i of $('langChecks').querySelectorAll('input')) i.checked = e.target.checked; syncTranslateButton(); };
+  $('langSearch').oninput = () => renderLangChecks();
+  $('langSearch').onkeydown = (e) => { if (e.key === 'Escape' && e.target.value) { e.preventDefault(); e.stopPropagation(); e.target.value = ''; renderLangChecks(); } };
+  $('langClose').onclick = () => $('langPop').hidePopover();
+  $('langBtn').onclick = () => openLangPicker($('langBtn'));
+  addEventListener('resize', placeLangPicker);
+  $('langPop').addEventListener('beforetoggle', (e) => { if (e.newState === 'closed') langClosedAt = performance.now(); });   // sync, unlike toggle
   $('translateBtn').onclick = async () => {
     if (!state.licensed) { $('langPop').hidePopover(); $('licensePop').showPopover(); return; }
     if (!state.shots.length) return toast('Add screenshots first.');
@@ -1269,7 +1337,9 @@ function setupTranslate() {
       error = e.message;
     }
     for (const lang of [...done, ...upToDate]) if (!state.langs.includes(lang)) state.langs.push(lang);
+    for (const i of $('langChecks').querySelectorAll('input')) if (done.includes(i.value) || upToDate.includes(i.value)) i.checked = false;
     renderLangChecks();
+    placeLangPicker();
     refresh({ fit: true });
     const left = usage ? ` ${usage.limit - usage.runs} of ${usage.limit} left this month.` : '';
     $('translateStatus').textContent = [
