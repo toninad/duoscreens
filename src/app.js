@@ -1571,7 +1571,12 @@ async function translateInto(targets) {
     failed.length && `Couldn't translate ${failed.map(langName).join(', ')}; try again.`,
     error,
   ].filter(Boolean).join(' ') + left;
-  if (!$('langPop').matches(':popover-open')) toast($('translateStatus').textContent, !!(failed.length || error));
+  if (!$('langPop').matches(':popover-open')) {   // the toast gets one short line, not the picker's full report
+    const names = (list) => (list.length > 2 ? `${list.length} languages` : list.map(langName).join(' and '));
+    toast(error || (failed.length ? `Couldn't translate ${names(failed)}. Try again.`
+      : done.length ? `Translated into ${names(done)}${usage ? ` · ${usage.limit - usage.runs} left this month` : ''}`
+      : 'Already up to date'), !!(failed.length || error));
+  }
   syncTranslateButton();
 }
 

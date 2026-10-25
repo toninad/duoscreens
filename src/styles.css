@@ -1334,3 +1334,11 @@ input:disabled + .lang-box { opacity: .4; }
 .brand-pro svg { width: 8px; height: 6px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .2s var(--ease); }
 #licensePop:popover-open ~ * .brand-pro svg { transform: rotate(180deg); }
 .brand-pro { margin-top: 2px; }
+
+/* Toast: compact, above the dock rather than on it, and never wider than a short line or two. */
+.toast {
+  bottom: calc(22px + 52px + 14px); max-width: min(380px, calc(100vw - 32px)); width: max-content;
+  padding: 9px 16px; border-radius: 16px; font-size: 13px; line-height: 1.4; text-align: center; text-wrap: balance;
+}
+body.home-mode .toast { bottom: max(24px, env(safe-area-inset-bottom)); }
+@media (max-width: 860px) { .toast { bottom: calc(max(10px, env(safe-area-inset-bottom)) + 56px + 10px); } }
