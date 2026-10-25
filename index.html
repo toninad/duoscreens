@@ -220,6 +220,15 @@
     </div>
   </div>
 
+  <dialog id="staleDialog" class="welcome stale-dialog" aria-labelledby="staleTitle">
+    <h2 id="staleTitle">Some languages are behind<span class="dot">.</span></h2>
+    <p id="staleText"></p>
+    <div class="stale-actions">
+      <button id="staleUpdate" class="btn primary" type="button" value="update">Update, then export</button>
+      <button id="staleAnyway" class="btn" type="button" value="anyway">Export as is</button>
+    </div>
+  </dialog>
+
   <dialog id="proWelcome" class="welcome" aria-labelledby="welcomeTitle">
     <svg class="welcome-mark" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="19"/><path d="M12.5 20.5l5 5 10-11"/></svg>
     <h2 id="welcomeTitle">You're Pro<span class="dot">.</span></h2>

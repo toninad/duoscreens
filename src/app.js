@@ -203,6 +203,7 @@ const pad2 = (n) => String(n).padStart(2, '0');
 const el = (tag, cls, html = '') => { const e = document.createElement(tag); if (cls) e.className = cls; e.innerHTML = html; return e; };
 const PLUS = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>';
 const ICON = {
+  refresh: svg('M13 8a5 5 0 1 1-1.5-3.6M13 2.8v2.6h-2.6'),
   dup: svg('M5.5 5.5V4a1.5 1.5 0 0 1 1.5-1.5h5A1.5 1.5 0 0 1 13.5 4v5A1.5 1.5 0 0 1 12 10.5h-1.5M4 5.5h5A1.5 1.5 0 0 1 10.5 7v5A1.5 1.5 0 0 1 9 13.5H4A1.5 1.5 0 0 1 2.5 12V7A1.5 1.5 0 0 1 4 5.5z'),
   left: svg('M10 4l-4 4 4 4'), right: svg('M6 4l4 4-4 4'), del: svg('M5 5l6 6M11 5l-6 6'),
   more: svg('M4 8h.01M8 8h.01M12 8h.01'),
@@ -459,6 +460,7 @@ function renderSidePanel() {
   nav.appendChild(add);
 
   const cur = focusedLang();
+  const stale = staleLangs();
   for (const lang of state.langs) {
     const b = row(langName(lang), lang === state.baseLang ? 'Original' : '', !focus.compare && lang === cur, () => setFocus({ lang, compare: false }));
     b.dataset.lang = lang;
@@ -470,6 +472,11 @@ function renderSidePanel() {
       b.appendChild(rm);
     }
     if (translating.has(lang)) markTranslating(b, lang);
+    else if (stale.includes(lang)) {   // behind the base language: a dot where the meta sits
+      b.classList.add('side-stale');
+      b.querySelector('.side-meta').replaceChildren(el('span', 'stale-dot'));
+      b.title = `${langName(state.baseLang)} changed since this was translated`;
+    }
     langNav.appendChild(b);
   }
   // Languages still on their way in: a placeholder row each, shimmering until the translation lands.
@@ -479,6 +486,14 @@ function renderSidePanel() {
     b.disabled = true;
     markTranslating(b, lang);
     langNav.appendChild(b);
+  }
+  if (stale.length) {
+    const up = el('button', 'side-row side-update', `${ICON.refresh}<span class="side-name"></span>`);
+    up.type = 'button';
+    up.querySelector('.side-name').textContent = stale.length === 1 ? `Update ${langName(stale[0])}` : `Update ${stale.length} languages`;
+    up.title = 'Translates only the lines that changed';
+    up.onclick = () => translateInto(stale);
+    langNav.appendChild(up);
   }
   if (state.langs.length > 1) {
     const cmp = row('Compare all', '', focus.compare, () => setFocus({ compare: !focus.compare }), 'side-compare');
@@ -749,7 +764,9 @@ function positionEditor() {
 }
 
 function stopEditing() {
+  const was = editing;
   editing = null;
+  if (was?.lang === state.baseLang) renderSidePanel();   // the edit may have put translations behind
   const ed = $('inlineEditor');
   ed.hidden = true;
   document.body.appendChild(ed);
@@ -1303,80 +1320,102 @@ function setupTranslate() {
   $('langBtn').onclick = () => openLangPicker($('langBtn'));
   addEventListener('resize', placeLangPicker);
   $('langPop').addEventListener('beforetoggle', (e) => { if (e.newState === 'closed') langClosedAt = performance.now(); });   // sync, unlike toggle
-  $('translateBtn').onclick = async () => {
-    if (!state.licensed) { $('langPop').hidePopover(); $('licensePop').showPopover(); return; }
-    if (!state.shots.length) return toast('Add screenshots first.');
-    const targets = selectedTargets();
-    // Every screen's words in the base language. Each translation remembers the words it was made
-    // from (shot.tsrc), so translating again only sends lines that changed since, and a language that's
-    // already up to date costs nothing. Hand edits to lines that didn't change are kept.
-    const slots = state.shots.flatMap(s => screensOf(s).map(screen => ({ s, screen, base: textFor(s, state.baseLang, screen) })));
-    const FIELDS = ['headline', 'subheadline'];
-    const changed = (lang) => slots.flatMap(({ s, screen, base }, i) => FIELDS
-      .filter(f => base[f] && (s.text[lang]?.[screen]?.[f] == null || s.tsrc?.[lang]?.[screen]?.[f] !== base[f]))
-      .map(f => [i, f]));
-    const put = (lang, i, f, value) => {
-      const { s, screen, base } = slots[i];
-      s.text[lang] = { ...s.text[lang], [screen]: { headline: '', subheadline: '', ...s.text[lang]?.[screen], [f]: value } };
-      s.tsrc = { ...s.tsrc, [lang]: { ...s.tsrc?.[lang], [screen]: { ...s.tsrc?.[lang]?.[screen], [f]: base[f] } } };
-    };
-    // Languages that need the same lines go together, up to 12 per request.
-    const batches = new Map();
-    const upToDate = [];
-    for (const lang of targets) {
-      const need = changed(lang);
-      // Empty lines need no translating: mirror them so the language is complete.
-      slots.forEach(({ base }, i) => FIELDS.forEach(f => { if (!base[f]) put(lang, i, f, ''); }));
-      if (!need.length) { upToDate.push(lang); continue; }
-      const k = JSON.stringify(need);
-      if (!batches.has(k)) batches.set(k, { need, langs: [] });
-      batches.get(k).langs.push(lang);
-    }
-    const requests = [...batches.values()].flatMap(({ need, langs }) => {
-      const out = [];
-      for (let i = 0; i < langs.length; i += 12) out.push({ need, langs: langs.slice(i, i + 12) });
-      return out;
-    });
-    $('translateBtn').disabled = true;
-    for (const { langs } of requests) for (const lang of langs) translating.add(lang);
-    renderSidePanel();
-    const done = [], failed = [];
-    let usage, lines = 0, error = '';
-    try {
-      for (const [n, { need, langs }] of requests.entries()) {
-        $('translateStatus').textContent = `Translating${requests.length > 1 ? ` (${n + 1} of ${requests.length})` : ''}…`;
-        const res = await translateTexts(need.map(([i, f]) => slots[i].base[f]), langs, state.baseLang, storedLicenseKey());
-        for (const [lang, out] of Object.entries(res.translations)) {
-          need.forEach(([i, f], j) => put(lang, i, f, out[j]));
-          done.push(lang);
-        }
-        failed.push(...res.failed);
-        for (const lang of langs) translating.delete(lang);   // this batch has landed: its rows stop shimmering
-        for (const lang of Object.keys(res.translations)) if (!state.langs.includes(lang)) state.langs.push(lang);
-        renderSidePanel();
-        lines = Math.max(lines, need.length);
-        usage = res.usage;
-      }
-    } catch (e) {
-      error = e.message;
-    } finally {
-      translating.clear();
-    }
-    for (const lang of [...done, ...upToDate]) if (!state.langs.includes(lang)) state.langs.push(lang);
-    for (const i of $('langChecks').querySelectorAll('input')) if (done.includes(i.value) || upToDate.includes(i.value)) i.checked = false;
-    renderLangChecks();
-    placeLangPicker();
-    refresh({ fit: true });
-    const left = usage ? ` ${usage.limit - usage.runs} of ${usage.limit} left this month.` : '';
-    $('translateStatus').textContent = [
-      done.length && `Translated ${lines} line${lines > 1 ? 's' : ''} into ${done.map(langName).join(', ')}. Review the text: exports include every language.`,
-      upToDate.length && `${upToDate.map(langName).join(', ')} already up to date (not counted).`,
-      failed.length && `Couldn't translate ${failed.map(langName).join(', ')}; try again.`,
-      error,
-    ].filter(Boolean).join(' ') + left;
-    syncTranslateButton();
-  };
+  $('translateBtn').onclick = () => translateInto(selectedTargets());
 }
+
+// Every screen's words in the base language, one slot per card and screen.
+const FIELDS = ['headline', 'subheadline'];
+const baseSlots = () => state.shots.flatMap(s => screensOf(s).map(screen => ({ s, screen, base: textFor(s, state.baseLang, screen) })));
+// The [slot, field] pairs a language still needs: lines it has no translation for, or whose base words
+// changed since it was translated (shot.tsrc keeps the words each translation was made from).
+const changedLines = (slots, lang) => slots.flatMap(({ s, screen, base }, i) => FIELDS
+  .filter(f => base[f] && (s.text[lang]?.[screen]?.[f] == null || s.tsrc?.[lang]?.[screen]?.[f] !== base[f]))
+  .map(f => [i, f]));
+
+/** Languages on the board whose text is behind the base language. Boards translated before the app
+ *  kept track (no tsrc for that language at all) aren't flagged: there's nothing to compare against. */
+function staleLangs() {
+  const slots = baseSlots();
+  return state.langs.filter(lang => lang !== state.baseLang && !translating.has(lang)
+    && state.shots.some(s => s.tsrc?.[lang]) && changedLines(slots, lang).length > 0);
+}
+
+let translateRunning = false;
+/** Translates the board into `targets`, sending only the lines each one needs. */
+async function translateInto(targets) {
+  if (!state.licensed) { $('langPop').hidePopover(); $('licensePop').showPopover(); return; }
+  if (!state.shots.length) return toast('Add screenshots first.');
+  if (translateRunning || !targets.length) return;
+  translateRunning = true;
+  // Every screen's words in the base language. Each translation remembers the words it was made
+  // from (shot.tsrc), so translating again only sends lines that changed since, and a language that's
+  // already up to date costs nothing. Hand edits to lines that didn't change are kept.
+  const slots = baseSlots();
+  const changed = (lang) => changedLines(slots, lang);
+  const put = (lang, i, f, value) => {
+    const { s, screen, base } = slots[i];
+    s.text[lang] = { ...s.text[lang], [screen]: { headline: '', subheadline: '', ...s.text[lang]?.[screen], [f]: value } };
+    s.tsrc = { ...s.tsrc, [lang]: { ...s.tsrc?.[lang], [screen]: { ...s.tsrc?.[lang]?.[screen], [f]: base[f] } } };
+  };
+  // Languages that need the same lines go together, up to 12 per request.
+  const batches = new Map();
+  const upToDate = [];
+  for (const lang of targets) {
+    const need = changed(lang);
+    // Empty lines need no translating: mirror them so the language is complete.
+    slots.forEach(({ base }, i) => FIELDS.forEach(f => { if (!base[f]) put(lang, i, f, ''); }));
+    if (!need.length) { upToDate.push(lang); continue; }
+    const k = JSON.stringify(need);
+    if (!batches.has(k)) batches.set(k, { need, langs: [] });
+    batches.get(k).langs.push(lang);
+  }
+  const requests = [...batches.values()].flatMap(({ need, langs }) => {
+    const out = [];
+    for (let i = 0; i < langs.length; i += 12) out.push({ need, langs: langs.slice(i, i + 12) });
+    return out;
+  });
+  $('translateBtn').disabled = true;
+  for (const { langs } of requests) for (const lang of langs) translating.add(lang);
+  renderSidePanel();
+  const done = [], failed = [];
+  let usage, lines = 0, error = '';
+  try {
+    for (const [n, { need, langs }] of requests.entries()) {
+      $('translateStatus').textContent = `Translating${requests.length > 1 ? ` (${n + 1} of ${requests.length})` : ''}…`;
+      const res = await translateTexts(need.map(([i, f]) => slots[i].base[f]), langs, state.baseLang, storedLicenseKey());
+      for (const [lang, out] of Object.entries(res.translations)) {
+        need.forEach(([i, f], j) => put(lang, i, f, out[j]));
+        done.push(lang);
+      }
+      failed.push(...res.failed);
+      for (const lang of langs) translating.delete(lang);   // this batch has landed: its rows stop shimmering
+      for (const lang of Object.keys(res.translations)) if (!state.langs.includes(lang)) state.langs.push(lang);
+      renderSidePanel();
+      lines = Math.max(lines, need.length);
+      usage = res.usage;
+    }
+  } catch (e) {
+    error = e.message;
+  } finally {
+    translating.clear();
+    translateRunning = false;
+  }
+  for (const lang of [...done, ...upToDate]) if (!state.langs.includes(lang)) state.langs.push(lang);
+  for (const i of $('langChecks').querySelectorAll('input')) if (done.includes(i.value) || upToDate.includes(i.value)) i.checked = false;
+  renderLangChecks();
+  placeLangPicker();
+  refresh({ fit: true });
+  const left = usage ? ` ${usage.limit - usage.runs} of ${usage.limit} left this month.` : '';
+  $('translateStatus').textContent = [
+    done.length && `Translated ${lines} line${lines > 1 ? 's' : ''} into ${done.map(langName).join(', ')}. Review the text: exports include every language.`,
+    upToDate.length && `${upToDate.map(langName).join(', ')} already up to date (not counted).`,
+    failed.length && `Couldn't translate ${failed.map(langName).join(', ')}; try again.`,
+    error,
+  ].filter(Boolean).join(' ') + left;
+  if (!$('langPop').matches(':popover-open')) toast($('translateStatus').textContent, !!(failed.length || error));
+  syncTranslateButton();
+}
+
 
 // ---------- License (Pro) ----------
 const maskKey = (k) => (k.length > 14 ? `${k.slice(0, 8)}…${k.slice(-4)}` : k);
@@ -1491,7 +1530,31 @@ async function renderToPng(shot, tid, lang) {
   }
 }
 
+// Before exporting, offer to bring languages that fell behind up to date (Pro; free boards have none).
+function askAboutStale(stale) {
+  const dlg = $('staleDialog');
+  const names = stale.map(langName);
+  const list = names.length > 2 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names.join(' and ');
+  $('staleText').textContent = `${langName(state.baseLang)} changed since ${list} ${stale.length > 1 ? 'were' : 'was'} translated, so ${stale.length > 1 ? 'they' : 'it'} would export with older text.`;
+  return new Promise(resolve => {
+    const done = (v) => { dlg.onclose = null; dlg.close(); resolve(v); };
+    $('staleUpdate').onclick = () => done('update');
+    $('staleAnyway').onclick = () => done('anyway');
+    dlg.onclose = () => resolve('cancel');
+    dlg.showModal();
+  });
+}
+
 async function exportZip() {
+  const stale = state.licensed ? staleLangs() : [];
+  if (stale.length) {
+    const choice = await askAboutStale(stale);
+    if (choice === 'cancel') return;
+    if (choice === 'update') {
+      await translateInto(stale);
+      if (staleLangs().length) return;   // the update didn't finish; its message says why
+    }
+  }
   const btn = $('exportBtn');
   btn.disabled = true;
   const zip = new JSZip();

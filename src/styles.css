@@ -1208,3 +1208,15 @@ input:disabled + .lang-box { opacity: .4; }
   .side-panel .side-row.side-loading::after { background: color-mix(in srgb, var(--orange) 6%, transparent); }
 }
 @media (max-width: 860px) { .side-skel { width: 18px; } }
+
+/* Translations behind the base language: an orange dot on the row, and one row to update them all. */
+.stale-dot { display: block; width: 7px; height: 7px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 3px color-mix(in srgb, var(--orange) 16%, transparent); }
+.side-row.side-stale .side-meta { display: block !important; }
+.side-row.side-stale:hover .side-meta { display: none !important; }
+.side-panel .side-update { color: var(--orange); font-weight: 600; height: 32px; animation: side-in .3s var(--ease); }
+.side-panel .side-update:hover { background: color-mix(in srgb, var(--orange) 9%, transparent); }
+.side-panel .side-update svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; transition: transform .4s var(--ease); }
+.side-panel .side-update:hover svg { transform: rotate(-60deg); }
+.stale-dialog h2 { font-size: 26px; }
+.stale-actions { display: flex; flex-direction: column; gap: 8px; }
+.stale-actions .btn { width: 100%; padding: 12px 16px; font-size: 15px; }

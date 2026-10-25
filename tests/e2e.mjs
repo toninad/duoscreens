@@ -231,6 +231,20 @@ try {
   const after = await page.evaluate((k) => ({ h: window.__dss.state.shots[0].text.de[k].headline, other: window.__dss.state.shots[1].text.de['duo/inner'].headline }), edited);
   check(after.h === '[de] Fresh headline' && after.other === 'Mach da weiter, wo du aufgehört hast', 'The edit is translated and the other lines are kept');
   await page.keyboard.press('Escape');
+  // Only German was updated after the edit: Japanese is now behind English, and says so.
+  check(await page.$$eval('#langNav .side-stale', rs => rs.map(r => r.dataset.lang).join()) === 'ja', 'A language behind English gets a dot in the side panel');
+  check((await page.textContent('#langNav .side-update')) === 'Update Japanese', 'An Update row offers to bring it up to date');
+  await page.click('#exportBtn');
+  await page.waitForSelector('#staleDialog[open]');
+  check((await page.textContent('#staleText')).includes('Japanese'), 'Export warns that Japanese would go out with older text');
+  await page.keyboard.press('Escape');
+  check(!(await page.$('#staleDialog[open]')), 'The warning can be dismissed without exporting');
+  const beforeUpdate = translateRequests;
+  await page.click('#langNav .side-update');
+  await page.waitForFunction(() => !document.querySelector('#langNav .side-stale, #langNav .side-update, #langNav .side-loading'));
+  check(translateRequests === beforeUpdate + 1 && JSON.stringify(lastTranslate.texts) === '["Fresh headline"]' && lastTranslate.targetLanguages.join() === 'ja', 'Update sends just the changed line, for just that language');
+  check(await page.evaluate((k) => window.__dss.state.shots[0].text.ja[k].headline, edited) === '[ja] Fresh headline', 'The update lands and the dot goes away');
+  await page.keyboard.press('Escape');
   check(await page.$$eval('#langNav [data-lang]', rs => rs.map(r => r.dataset.lang).join()) === 'en,de,ja', 'The side panel lists every language');
   check(await page.$$eval('.lang-row', rs => rs.map(r => r.dataset.lang).join()) === 'en', 'The canvas shows one language at a time');
   await page.click('#langNav [data-lang="de"]');
