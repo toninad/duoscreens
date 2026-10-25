@@ -1110,3 +1110,8 @@ body.home-mode .top-left { padding-right: 16px; }
   .side-board-title { width: 130px; flex: none; height: 30px; border-radius: 999px; background: var(--fill); }
   .save-status { display: none; }
 }
+
+/* No "Add screenshots" button: captures go in by dropping them on the board or the + on an empty
+   frame. No divider after the brand either. */
+.board-tools .board-add { display: none !important; }
+.top-left .brand, .side-panel .top-left .brand { border-right: 0 !important; margin-right: 0 !important; }

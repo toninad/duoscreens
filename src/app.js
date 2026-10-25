@@ -1042,7 +1042,7 @@ const SKETCH = {
     <rect x="52" y="12" width="116" height="76" rx="6"/><path d="M38 96h144l-5 7H43z"/><path d="M103 12h14v3.5h-14z" class="ink"/></svg>`,
 };
 const PREFS_KEY = 'hhstudio.devices';
-let picker = null;   // { mode: 'first' | 'add' | 'replace', groupId?, family, model }
+let picker = null;   // { mode: 'first' | 'new' | 'add' | 'replace', groupId?, family, model }
 
 function newGroup(device) {
   const g = { id: nextId++, device, shots: [] };
@@ -1051,7 +1051,7 @@ function newGroup(device) {
 }
 
 // One group per kind of device: every iPhone frame exports the same 6.9″ size, so there's one iPhone set.
-const usedElsewhere = (id) => picker?.mode !== 'first' && state.groups.some(g => deviceById(g.device).family === deviceById(id).family && g.id !== picker?.groupId);
+const usedElsewhere = (id) => picker?.mode !== 'first' && picker?.mode !== 'new' && state.groups.some(g => deviceById(g.device).family === deviceById(id).family && g.id !== picker?.groupId);
 
 function renderDeviceList() {
   const list = $('deviceList');
@@ -1081,7 +1081,7 @@ function renderDeviceList() {
   $('deviceDone').disabled = !d;
 }
 
-/** mode: 'first', 'add', or { replace: groupId }. */
+/** mode: 'first' (first visit, can't be closed), 'new' (a new board), 'add', or { replace: groupId }. */
 function openDeviceDialog(mode = 'add') {
   const replace = typeof mode === 'object' ? mode.replace : null;
   const kind = replace ? 'replace' : mode;
@@ -1094,12 +1094,13 @@ function openDeviceDialog(mode = 'add') {
   const dlg = $('deviceDialog');
   dlg.classList.toggle('first', kind === 'first');
   $('deviceTitle').innerHTML = kind === 'first' ? 'What are your screenshots for?'
+    : kind === 'new' ? 'New board<span class="dot">.</span>'
     : kind === 'replace' ? 'Change device<span class="dot">.</span>' : 'Add a device<span class="dot">.</span>';
-  $('deviceLead').textContent = kind === 'first'
+  $('deviceLead').textContent = kind === 'first' || kind === 'new'
     ? 'Pick a device to start. You can add more later, each in its own group.'
     : kind === 'replace' ? 'Your headlines stay; the screens empty for the new device.'
     : 'It gets its own group of screenshots on the board.';
-  $('deviceDone').textContent = kind === 'first' ? 'Continue' : kind === 'replace' ? 'Change' : 'Add device';
+  $('deviceDone').textContent = kind === 'first' ? 'Continue' : kind === 'new' ? 'Create board' : kind === 'replace' ? 'Change' : 'Add device';
   renderDeviceList();
   if (!dlg.open) { dlg.showModal(); dlg.focus(); }   // focus the dialog, not a tile, so no ring shows until keyboard use
 }
@@ -1109,6 +1110,12 @@ async function confirmDevice() {
   if (!id) return;
   await loadFrame(id, state.colors[id]);
   state.models[deviceById(id).family] = id;
+  if (picker.mode === 'new') {   // a new board: only made now that a device is picked
+    $('deviceDialog').close();
+    saveDevicePrefs();
+    await newBoard({ device: id });
+    return;
+  }
   if (picker.mode === 'replace') {
     const g = state.groups.find(x => x.id === picker.groupId);
     if (g.device !== id) {
@@ -1614,21 +1621,31 @@ async function openBoard(id) {
   await metaStore.set('current', rec.id).catch(() => {});
 }
 
-/** A new board: from a saved document (backup), or empty with the device picker. */
-async function newBoard({ doc = null, name = 'Untitled board' } = {}) {
+/** The device a board gets when one is needed without asking: the last one picked. */
+const defaultDevice = () => state.models[FAMILIES[0].id] || Object.keys(state.available)[0];
+
+/**
+ * A new board: from a saved document (backup), or empty for a device. Without either, the device
+ * picker opens first; the board is only made once a device is picked, so closing it changes nothing.
+ */
+async function newBoard({ doc = null, name = 'Untitled board', device = null } = {}) {
+  if (!doc && !device) { openDeviceDialog('new'); return; }
   await saveNow();
   const id = crypto.randomUUID(), now = Date.now();
   currentBoard = { id, name, createdAt: now };
   if (doc) await hydrateBoard(doc);
   else {
     await hydrateBoard({ format: FORMAT, baseLang: 'en', langs: ['en'], style: styleOut(defaultStyle()), colors: state.colors, models: state.models, groups: [] });
+    state.groups = [newGroup(device)];
+    focus.group = state.groups[0].id;
+    structureKey = '';
+    refresh({ fit: true });
   }
   lastSavedJson = '';
   if (saving) await saveNow();
   await metaStore.set('current', id).catch(() => {});
   showHome(false);
   renderBoardChrome();
-  if (!doc) openDeviceDialog('first');
 }
 
 /** The saved record of a board, with the open one saved first so it's current. */
@@ -1869,7 +1886,7 @@ function setupBoards() {
     if (location.hash === '#boards') showHome(true);
     else if (homeShown()) {
       if (currentBoard) showHome(false);
-      else { const all = await listBoards(); if (all.length) openBoard(all[0].id); else newBoard(); }
+      else { const all = await listBoards(); if (all.length) openBoard(all[0].id); else newBoard({ device: defaultDevice() }); }
     }
   });
   $('syncToggle').onclick = async () => {
@@ -1914,7 +1931,7 @@ async function onBoardChanged(id, how) {
     toast('This board was deleted in another browser.');
     currentBoard = null;
     const rest = await listBoards();
-    if (rest.length) await openBoard(rest[0].id); else await newBoard();
+    if (rest.length) await openBoard(rest[0].id); else await newBoard({ device: defaultDevice() });
     return;
   }
   if (id === currentBoard?.id && how === 'changed') {

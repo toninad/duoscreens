@@ -130,6 +130,11 @@ try {
   check(await a.evaluate(() => location.hash) === '#boards' && await a.isVisible(card('HearHere launch')), 'The Boards page lists the board');
   await a.click('#homeNew');
   await a.waitForSelector('#deviceDialog[open]');
+  check(await a.isVisible('#deviceClose'), 'The new-board device picker can be closed');
+  await a.click('#deviceClose');
+  check(!(await a.isVisible('#deviceDialog')) && (await boardNames(a)).join() === 'HearHere launch' && await a.isVisible('#home'), 'Closing it makes no board and stays on the Boards page');
+  await a.click('#homeNew');
+  await a.waitForSelector('#deviceDialog[open]');
   await a.click('.tile[data-family="iphone"] .tile-select'); await a.click('#deviceDone');
   await a.waitForFunction(() => window.__dss.state.groups[0]?.device.startsWith('iphone') && document.getElementById('home').hidden);
   check(await state(a, () => window.__dss.state.shots.length) === 1, 'New board opens empty, with the device picked');
