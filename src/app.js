@@ -196,12 +196,19 @@ const ICON = {
   check: svg('M3.5 8.5l3 3 6-7'),
 };
 
+let moveTimer;
 function applyView() {
   const world = $('boardWorld');
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
+  world.classList.add('moving');
+  clearTimeout(moveTimer);
+  moveTimer = setTimeout(() => world.classList.remove('moving'), 160);
   // Labels and controls on the board are counter-scaled, so they stay the same size on screen at any
   // zoom (like Figma's frame names); only the screenshots grow and shrink.
   world.style.setProperty('--ui', String(1 / view.z));
+  // Zoomed far out, captions would run into each other: keep only the number, then nothing.
+  world.classList.toggle('far', view.z < 0.45);
+  world.classList.toggle('farther', view.z < 0.22);
   // Dots every 24 board pixels; when zoomed out far they'd crowd, so skip to every 2nd, 4th…
   let grid = 24 * view.z;
   while (grid < 14) grid *= 2;
@@ -257,7 +264,10 @@ function fitBoard() {
   if (!world.offsetWidth || !world.offsetHeight) return;
   const narrow = matchMedia('(max-width: 860px)').matches;
   const top = narrow ? 72 : 100, bottom = narrow ? 92 : 104, side = narrow ? 16 : 48;
-  const bw = board.clientWidth - side * 2, bh = board.clientHeight - top - bottom;
+  // Names above, captions below and the round + beside the cards keep their screen size outside
+  // the measured layout, so leave room for them.
+  const plusW = narrow ? 0 : 70, langW = state.langs.length > 1 && !narrow ? 100 : 0, nameH = 40, capH = narrow ? 90 : 30;
+  const bw = board.clientWidth - side * 2 - plusW - langW, bh = board.clientHeight - top - bottom - nameH - capH;
   // The board's labels keep their screen size, so the world's size depends on the zoom: settle it.
   let w, h;
   for (let i = 0; i < 4; i++) {
@@ -265,9 +275,12 @@ function fitBoard() {
     // Phones stack the cards in one column, so fit the width and let people pan down.
     view.z = Math.min(1, Math.max(0.08, narrow ? bw / w : Math.min(bw / w, bh / h)));
     world.style.setProperty('--ui', String(1 / view.z));
+    // Gaps between rows and groups are sized for this zoom (room for names and captions); zooming
+    // afterwards leaves them alone, so nothing moves while you zoom.
+    world.style.setProperty('--fit-ui', String(1 / view.z));
   }
-  view.x = side + (bw - w * view.z) / 2;
-  view.y = top + Math.max(0, (bh - h * view.z) / 2);
+  view.x = side + langW + (bw - w * view.z) / 2;
+  view.y = top + nameH + Math.max(0, (bh - h * view.z) / 2);
   applyView();
 }
 

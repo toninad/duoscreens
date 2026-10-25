@@ -924,3 +924,38 @@ body { display: block; height: 100dvh; }
 .hex:focus { outline: 2px solid var(--orange); outline-offset: 0; }
 .text-swatch { border: 0; padding: 0; }
 .text-swatch.open, .custom-swatch.open { background-color: color-mix(in srgb, var(--ink) 12%, transparent); }
+
+/* Board labels keep their screen size (zoom: --ui) but never take up layout space, so zooming
+   never moves the screenshots: names float above their row, captions below their frame, and the
+   round + beside the last card. The gaps between rows and groups are fixed board distances. */
+.board-world { gap: 160px; padding: 0; }
+.group { position: relative; gap: 120px; }
+.group-head { position: absolute; left: 0; bottom: 100%; margin: 0 0 12px; white-space: nowrap; flex-wrap: nowrap; }
+.group .lang-row { position: relative; gap: 0; }
+.group .row-head { position: absolute; left: 0; bottom: 100%; margin: 0 0 8px; white-space: nowrap; }
+.group .lang-row:first-child .row-head { margin-bottom: 44px; }   /* sits under the group name */
+.group .row-shots { position: relative; }
+.frame-wrap { gap: 0; }
+.group .frame-cap { position: absolute; left: 0; top: 100%; margin: 8px 0 0; white-space: nowrap; }
+.add-screen { position: absolute; left: 100%; top: 50%; margin: 0 0 0 22px; transform: translateY(-50%); }
+.add-screen:hover { transform: translateY(-50%) scale(1.06); }
+.add-group { margin-top: 0; }
+/* Smooth while moving (the browser keeps the board as one layer), sharp again at rest. */
+.board-world.moving { will-change: transform; }
+@media (max-width: 860px) {
+  .group .row-shots { gap: 120px; }
+  .add-screen { left: 50%; top: 100%; margin: 46px 0 0; transform: translateX(-50%); }
+  .add-screen:hover { transform: translateX(-50%); }
+}
+.board-world.far .frame-cap .cap-text { display: none; }
+.board-world.farther .frame-cap { display: none; }
+
+/* Languages: the label sits left of its row, so rows need no extra height for it. */
+.group .row-head, .group .lang-row:first-child .row-head { left: auto; right: 100%; bottom: auto; top: 0; margin: 0 16px 0 0; text-align: right; }
+.board-world { gap: max(160px, calc(84px * var(--fit-ui, 1))); }
+.group { gap: max(48px, calc(40px * var(--fit-ui, 1))); }
+/* The card toolbar belongs to the screenshot, so show it once, on the first language row. */
+.group .lang-row:not(:first-of-type) .card-pose { display: none; }
+.group .lang-row:not(:first-of-type) .shot-card.selected .frame-cap { visibility: visible; }
+.group .row-shots { width: max-content; }
+.group .row-head .row-remove { position: absolute; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 4px; }
