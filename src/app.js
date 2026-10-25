@@ -1050,6 +1050,25 @@ function newGroup(device) {
   return g;
 }
 
+/** A group for another device that mirrors `like`: as many cards, the same headlines in every language and
+ *  the same per-card design. Captures stay empty, since they belong to the other device's screens. */
+function groupLike(device, like) {
+  if (!like?.shots.length) return newGroup(device);
+  const g = { id: nextId++, device, shots: [] };
+  const screens = [...new Set(targetsOfDevice(device).map(t => t.display.screen))];
+  const firstOf = (byScreen) => byScreen && Object.values(byScreen)[0];
+  for (const src of like.shots) {
+    const shot = newShot(g);
+    if (!shot.target) break;   // every screen has its 10
+    for (const [lang, byScreen] of Object.entries(src.text || {})) if (firstOf(byScreen)) shot.text[lang] = sameText(screens, firstOf(byScreen));
+    for (const [lang, byScreen] of Object.entries(src.tsrc || {})) if (firstOf(byScreen)) (shot.tsrc ||= {})[lang] = sameText(screens, firstOf(byScreen));
+    if (src.style && Object.keys(src.style).length) shot.style = { ...src.style };
+    if (src.edited) shot.edited = true;
+    g.shots.push(shot);
+  }
+  return g;
+}
+
 // One group per kind of device: every iPhone frame exports the same 6.9″ size, so there's one iPhone set.
 const usedElsewhere = (id) => picker?.mode !== 'first' && picker?.mode !== 'new' && state.groups.some(g => deviceById(g.device).family === deviceById(id).family && g.id !== picker?.groupId);
 
@@ -1127,7 +1146,7 @@ async function confirmDevice() {
     state.groups = [newGroup(id)];
     focus.group = state.groups[0].id;
   } else {
-    state.groups.push(newGroup(id));
+    state.groups.push(groupLike(id, state.groups[0]));
     focus.group = state.groups.at(-1).id;
   }
   $('deviceDialog').close();
@@ -2036,4 +2055,6 @@ async function boot() {
   if (firstLaunch && !hadBoard && !fromCheckout) openDeviceDialog('first');
   window.__dss = { state, ready: true, saveNow, board: () => currentBoard, sync: () => sync }; // used by the headless test
 }
-boot();
+// The page stays hidden (html.booting) until the saved board is drawn, so a refresh doesn't flash the
+// starter design or toolbars in their first-pass positions. Shown even if boot fails.
+boot().finally(() => requestAnimationFrame(() => document.documentElement.classList.remove('booting')));

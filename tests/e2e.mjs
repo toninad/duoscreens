@@ -271,15 +271,15 @@ try {
   await page.waitForFunction(() => window.__dss.state.colors['iphone-air'] === 'sky-blue');
   check(true, 'The finish is picked from the group menu');
   check(!(await page.$('.segmented[data-pose="iphone-air/main"]')), 'iPhones have no orientation choice: always portrait');
-  check(await page.$$eval('.group[data-device="iphone-air"] .lang-row[data-lang="en"] .shot-card .frame', fs => fs.length) === 1, 'The iPhone group starts with one empty card');
+  check(await page.$$eval('.group[data-device="iphone-air"] .lang-row[data-lang="en"] .shot-card .frame', fs => fs.length) === 4, 'A new device gets as many cards as the first one');
+  check(await page.evaluate(() => { const [a, b] = window.__dss.state.groups; return b.shots.every((s, i) => JSON.stringify(Object.values(s.text.en)[0]) === JSON.stringify(Object.values(a.shots[i].text.en)[0]) && JSON.stringify(s.style || {}) === JSON.stringify(a.shots[i].style || {})); }), 'Its cards copy the first device\'s headlines and design');
   const half = await exportZip(page, 'devices-half');
   check(Object.keys(half.zip.files).filter(n => n.endsWith('.png')).length === 12, 'Empty iPhone screens are left out of the export');
-  await page.click('.group[data-device="iphone-air"] .add-screen');
   for (const n of [1, 2]) {
     const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click(`.group[data-device="iphone-air"] .lang-row[data-lang="en"] .shot-card:nth-child(${n}) .screen-add`)]);
     await fc.setFiles(fixture);
   }
-  await page.waitForFunction(() => window.__dss.state.groups[1].shots.every(s => s.images.iphone));
+  await page.waitForFunction(() => window.__dss.state.groups[1].shots.slice(0, 2).every(s => s.images.iphone));
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(out, 'devices.png') });
   const all = await exportZip(page, 'devices');

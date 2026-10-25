@@ -127,7 +127,8 @@ try {
   check(true, 'A board can be renamed from the side panel');
   await a.click('#toBoards');
   await a.waitForSelector('#home:not([hidden])');
-  check(await a.evaluate(() => location.hash) === '#boards' && await a.isVisible(card('HearHere launch')), 'The Boards page lists the board');
+  const listed = await a.waitForSelector(card('HearHere launch'), { timeout: 5000 }).then(() => true, () => false);   // the cards render from IndexedDB just after
+  check(await a.evaluate(() => location.hash) === '#boards' && listed, 'The Boards page lists the board');
   await a.click('#homeNew');
   await a.waitForSelector('#deviceDialog[open]');
   check(await a.isVisible('#deviceClose'), 'The new-board device picker can be closed');
