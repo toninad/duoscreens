@@ -206,8 +206,15 @@ try {
 
   // ---------- Sync ----------
   await unlock(a);
+  // Before R2 is set up on the server: turning sync on explains itself and switches back off.
+  const r2 = env.SYNC; delete env.SYNC;
+  await menu(a); await a.click('#syncToggle');
+  await a.waitForFunction(() => !window.__dss.sync().enabled && window.__dss.sync().status.state === 'error');
+  check((await a.textContent('#syncNote')).includes('isn’t available yet'), 'Without server storage, sync says it isn’t available yet');
+  env.SYNC = r2;
+  await a.keyboard.press('Escape');
   await a.click('#boardSwitch');
-  check((await a.textContent('#syncNote')).includes('Off'), 'Sync is off until turned on');
+  check(!(await a.evaluate(() => window.__dss.sync().enabled)), 'Sync is off until turned on');
   await a.click('#syncToggle');
   await a.waitForFunction(() => window.__dss.sync().status.state === 'synced', null, { timeout: 30_000 })
     .catch(async e => { console.log('status', JSON.stringify(await syncState(a)), 'calls', syncCalls, a.errors); throw e; });

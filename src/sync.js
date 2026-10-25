@@ -110,6 +110,7 @@ export function createSync(app) {
     if (res.ok || res.status === 409 || res.status === 422) return Object.assign(data, { status: res.status });
     if (data.pro === false) throw new SyncError(`Sync stopped: ${data.error || 'license not active.'}`, { status: res.status, stop: true });
     if (res.status === 413) throw new SyncError(data.error || 'Sync storage is full.', { status: 413, stop: true });
+    if (res.status === 503) throw new SyncError('Sync isn’t available yet. Your boards are saved in this browser.', { status: 503, stop: true });
     throw new SyncError(data.error || `Sync failed (${res.status}).`, { status: res.status });
   }
 

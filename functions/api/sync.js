@@ -39,7 +39,7 @@ const objectKey = (keyHash, id) => `${keyHash}/${id}`;
 
 export async function onRequestPost({ request, env }) {
   if (!originAllowed(request, env)) return json({ error: 'Forbidden' }, 403);
-  if (!env.SYNC) return json({ error: 'Sync is not set up on the server yet.' }, 503);
+  if (!env.SYNC || !env.DB) return json({ error: 'Sync is not set up on the server yet.' }, 503);
   if (!(await rateLimit(env, request, 'sync', 600))) return json({ error: 'Too many requests. Wait a minute.' }, 429);
 
   let keyHash;
