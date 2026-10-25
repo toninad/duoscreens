@@ -3,33 +3,10 @@
 // Run: npm run test:functions
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
 import { onRequestPost as license } from '../functions/api/license.js';
 import { onRequestPost as translate } from '../functions/api/translate.js';
 import { onRequestPost as claim } from '../functions/api/claim.js';
-
-// --- D1 stand-in: the subset of the D1 API the functions use -------------------------------------
-function fakeD1() {
-  const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(new URL('../migrations/0001_init.sql', import.meta.url), 'utf8'));
-  return {
-    raw: db,
-    prepare(sql) {
-      const stmt = db.prepare(sql.replace(/\?(\d+)/g, '?'));
-      // D1 numbers params ?1, ?2…; node:sqlite takes them positionally, so expand by index.
-      const order = [...sql.matchAll(/\?(\d+)/g)].map(m => Number(m[1]) - 1);
-      let args = [];
-      const api = {
-        bind(...a) { args = order.map(i => a[i]); return api; },
-        async first() { return stmt.get(...args) ?? null; },
-        async run() { stmt.run(...args); return { success: true }; },
-        async all() { return { results: stmt.all(...args) }; },
-      };
-      return api;
-    },
-  };
-}
+import { fakeD1 } from './fakes.mjs';
 
 // --- Fake Polar + Anthropic -------------------------------------------------------------------------
 const VALID_KEY = 'POLAR-GOOD-KEY-0001';

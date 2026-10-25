@@ -7,6 +7,9 @@ import { canvasToRgbPng } from './png.js';
 import { checkLicense, claimCheckout, storedLicenseKey, forgetLicense } from './license.js';
 import { translateTexts } from './translate.js';
 import { makeSampleScreenshot, SAMPLE_SHOTS } from './sample.js';
+import { openStore, boards as boardStore, meta as metaStore, cleanupImages, askPersistence, imageHashesOf } from './store.js';
+import { prepareImage, imageFromHash, hashOf, blobForHash, storeVerified } from './images.js';
+import { createSync } from './sync.js';
 
 const $ = (id) => document.getElementById(id);
 const svg = (d) => `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${d}"/></svg>`;
@@ -502,6 +505,7 @@ function syncSelectionUI() {
 
 let drawPending = false;
 function scheduleDraw() {
+  scheduleSave();
   if (drawPending) return;
   drawPending = true;
   requestAnimationFrame(() => { drawPending = false; drawAll(); });
@@ -533,6 +537,7 @@ function renderBoard({ fit = false } = {}) {
   syncSelectionUI();
   drawAll();
   if (fit) requestAnimationFrame(fitBoard);
+  scheduleSave();
 }
 
 function refresh(opts) { renderBoard(opts); }
@@ -823,14 +828,15 @@ function setupBoard() {
 }
 
 // ---------- Uploads ----------
-function loadImage(file) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);   // stays in the browser; nothing is uploaded
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Could not read ' + file.name));
-    img.src = url;
-  });
+// A capture is scaled, compressed and saved in this browser (see images.js); if saving fails it's
+// still used, just not kept.
+async function intakeImage(file) {
+  try { return (await prepareImage(file, { save: saving })).img; }
+  catch (e) {
+    if (!e.storage) throw new Error(`Could not read ${file.name || 'that image'}.`);
+    saveFailed(e);
+    return (await prepareImage(file, { save: false })).img;
+  }
 }
 
 const DEFAULT_COPY = [
@@ -872,7 +878,7 @@ async function addFiles(files) {
   let full = 0;
   for (const f of images) {
     try {
-      const img = await loadImage(f);
+      const img = await intakeImage(f);
       const { group, target, pose } = bestScreen(img);
       const screen = target.display.screen;
       // An empty card on that display, else any empty card (it switches display), else a new card.
@@ -895,7 +901,11 @@ function pickImageFor(shotId, screen) {
 async function setScreenImage(shotId, screen, file) {
   const shot = state.shots.find(s => s.id === shotId);
   if (!shot || !file || !/^image\//.test(file.type)) return;
-  try { shot.images = { ...shot.images, [screen]: await loadImage(file) }; refresh(); }
+  try {
+    shot.images = { ...shot.images, [screen]: await intakeImage(file) };
+    if (shot.missing) delete shot.missing[screen];
+    refresh();
+  }
   catch (e) { toast(e.message); }
 }
 
@@ -1119,11 +1129,6 @@ async function confirmDevice() {
   refresh({ fit: true });
 }
 
-/** Free keeps one group; called when Pro goes away. */
-function limitDevicesToPlan() {
-  if (!state.licensed && state.groups.length > 1) { state.groups = state.groups.slice(0, 1); saveDevicePrefs(); }
-}
-
 function saveDevicePrefs() {
   try { localStorage.setItem(PREFS_KEY, JSON.stringify({ groups: state.devices, models: state.models, colors: state.colors })); } catch {}
 }
@@ -1283,8 +1288,9 @@ function applyLicense(valid, message) {
   $('licenseBadge').classList.toggle('pro', valid);
   if (message) $('licenseStatus').textContent = message;
   syncTranslateButton();
-  limitDevicesToPlan();
   if ($('deviceDialog').open) renderDeviceList();
+  if (valid) sync?.schedule(200);
+  renderSyncControls();
   structureKey = '';   // the "Add device" button shows or drops its Pro tag
   renderBoard();
 }
@@ -1421,6 +1427,426 @@ function showProgress(done, total) {
   clearTimeout(toastTimer);
 }
 
+// ---------- Boards: saving in this browser, and sync for Pro ----------
+// A board is everything on the canvas. It's saved in IndexedDB (store.js) shortly after every
+// change, as a document that names its captures by hash; the captures are stored once each.
+const FORMAT = 1;
+const TAB = crypto.randomUUID();
+let saving = false;            // IndexedDB works here
+let currentBoard = null;       // { id, name, createdAt }
+let lastSavedJson = '';
+let saveTimer = null, saveChain = Promise.resolve(), hydrating = false, lastEditAt = 0;
+let unknownGroups = [];        // groups for devices this version doesn't know: kept as they were
+let sync = null;
+const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('hhstudio') : null;
+
+const styleOut = (st) => st && Object.fromEntries(Object.entries(st).map(([k, v]) => [k, k === 'template' ? v?.id : v]));
+const styleIn = (st) => st && Object.fromEntries(Object.entries(st).map(([k, v]) => [k, k === 'template' ? (templateById(v) || templateById('paper')) : v]));
+const defaultStyle = () => ({ ...themePatch(templateById('paper')), layout: 'top', headlineScale: 1 });
+
+async function serializeBoard() {
+  const groups = [];
+  for (const g of state.groups) {
+    const shots = [];
+    for (const s of g.shots) {
+      const images = { ...(s.missing || {}) };   // captures still on their way from sync keep their place
+      for (const [screen, img] of Object.entries(s.images || {})) {
+        if (!img) continue;
+        let h = hashOf(img);
+        if (!h) {   // e.g. the sample captures: compress and keep them like any other
+          try { const p = await prepareImage(img, { save: saving }); h = p.hash; if (s.images[screen] === img) s.images[screen] = p.img; }
+          catch (e) { if (e.storage) saveFailed(e); continue; }
+        }
+        images[screen] = h;
+      }
+      shots.push({ id: s.id, target: s.target, pose: s.pose, edited: !!s.edited, style: styleOut(s.style) || null, text: s.text || {}, tsrc: s.tsrc || {}, images });
+    }
+    groups.push({ id: g.id, device: g.device, shots });
+  }
+  return { format: FORMAT, baseLang: state.baseLang, langs: [...state.langs], style: styleOut(state.style), colors: { ...state.colors }, models: { ...state.models }, groups: [...groups, ...unknownGroups] };
+}
+
+/** Puts a saved document on the canvas. */
+async function hydrateBoard(doc) {
+  if (!doc || typeof doc !== 'object') throw new Error('This board is empty or damaged.');
+  if (doc.format > FORMAT) throw new Error('This board was saved by a newer version of HearHere Studio. Reload the page to open it.');
+  hydrating = true;
+  try {
+    if (editing) stopEditing();
+    for (const [id, c] of Object.entries(doc.colors || {})) if (state.available[id]?.some(x => x.id === c)) state.colors[id] = c;
+    for (const [fam, id] of Object.entries(doc.models || {})) if (state.available[id]) state.models[fam] = id;
+    const groups = [];
+    unknownGroups = [];
+    let maxId = 0;
+    for (const g of doc.groups || []) {
+      const known = deviceById(g.device);
+      const device = state.available[g.device] ? g.device : DEVICES.find(d => known && d.family === known.family && state.available[d.id])?.id;
+      if (!device) { unknownGroups.push(g); continue; }
+      const shots = [];
+      for (const s of g.shots || []) {
+        const images = {}, missing = {};
+        for (const [screen, h] of Object.entries(s.images || {})) {
+          const img = await imageFromHash(h);
+          if (img) images[screen] = img; else missing[screen] = h;
+        }
+        const t = targetById(s.target);
+        shots.push({
+          id: s.id, target: t && t.device.id === device ? s.target : firstTarget(device)?.id, pose: s.pose || 'portrait',
+          edited: !!s.edited, ...(s.style ? { style: styleIn(s.style) } : {}), text: s.text || {}, tsrc: s.tsrc || {}, images,
+          ...(Object.keys(missing).length ? { missing } : {}),
+        });
+        maxId = Math.max(maxId, s.id || 0);
+      }
+      maxId = Math.max(maxId, g.id || 0);
+      groups.push({ id: g.id, device, shots });
+    }
+    await Promise.all([...new Set(groups.map(g => g.device))].map(id => loadFrame(id, state.colors[id])));
+    nextId = Math.max(nextId, maxId + 1);
+    state.groups = groups.length ? groups : [newGroup(state.models[FAMILIES[0].id] || Object.keys(state.available)[0])];
+    state.baseLang = doc.baseLang || 'en';
+    state.langs = [...new Set([state.baseLang, ...(doc.langs || [])])].filter(l => LANGUAGES.some(x => x[0] === l));
+    state.style = { ...defaultStyle(), ...(styleIn(doc.style) || {}) };
+    state.selection.clear();
+    Object.assign(focus, { group: null, lang: null, compare: false });
+    structureKey = '';
+    renderLangChecks();
+    syncToolbar();
+    refresh({ fit: true });
+    lastSavedJson = JSON.stringify(await serializeBoard());
+  } finally {
+    hydrating = false;
+  }
+}
+
+function scheduleSave() {
+  if (!saving || !currentBoard || hydrating) return;
+  lastEditAt = Date.now();
+  setSaveStatus('saving');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 600);
+}
+
+/** Saves the current board now (if it changed). Saves run one after another. */
+function saveNow() {
+  clearTimeout(saveTimer); saveTimer = null;
+  if (!saving || !currentBoard) return Promise.resolve();
+  const board = currentBoard;
+  saveChain = saveChain.then(async () => {
+    const doc = await serializeBoard();
+    const json = JSON.stringify(doc);
+    if (json === lastSavedJson && !board.renamed) { setSaveStatus('saved'); return; }
+    const now = Date.now();
+    await boardStore.update(board.id, (cur) => ({
+      remoteVersion: 0, createdAt: board.createdAt || now, ...(cur || {}),
+      id: board.id, name: board.name, doc, updatedAt: now, dirty: true, deleted: false,
+      pristine: (cur ? cur.pristine !== false : true) && isPristine(doc, board.name),
+    }));
+    if (currentBoard === board) lastSavedJson = json;
+    board.renamed = false;
+    channel?.postMessage({ type: 'saved', id: board.id, tab: TAB });
+    setSaveStatus('saved');
+    sync?.schedule();
+  }).catch(saveFailed);
+  return saveChain;
+}
+
+/** A starter board nobody has touched: no captures, no edited words, no translations, default name. */
+function isPristine(doc, name) {
+  return name === 'Untitled board' && doc.langs.length <= 1
+    && doc.groups.every(g => g.shots.every(s => !s.edited && !Object.keys(s.images || {}).length));
+}
+
+let saveWarned = false;
+function saveFailed(e) {
+  console.error('save', e);
+  setSaveStatus('error', e?.storage ? e.message : 'Couldn’t save in this browser. Export a backup to keep your work.');
+  if (!saveWarned) { saveWarned = true; toast(e?.storage ? e.message : 'Couldn’t save this board in the browser. Use Export backup to keep your work.', true); }
+}
+
+let saveState = 'saved', saveError = '';
+function setSaveStatus(s, msg = '') {
+  saveState = s; saveError = msg;
+  renderStatusLine();
+}
+
+function relTime(t) {
+  const d = Math.round((Date.now() - t) / 60000);
+  return d < 1 ? 'just now' : d < 60 ? `${d} min ago` : new Date(t).toLocaleString([], { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+}
+
+function renderStatusLine() {
+  const el = $('saveStatus');
+  if (!el) return;
+  const st = sync?.status || { state: 'off' };
+  let text, cls = '';
+  if (!saving) { text = 'Not saved in this window'; cls = 'warn'; }
+  else if (saveState === 'error') { text = saveError || 'Couldn’t save'; cls = 'warn'; }
+  else if (saveState === 'saving') text = 'Saving…';
+  else if (st.state === 'syncing') text = 'Saved · syncing…';
+  else if (st.state === 'synced') text = `Saved · synced ${relTime(st.at)}`;
+  else if (st.state === 'offline') { text = 'Saved · offline, will sync'; }
+  else if (st.state === 'error') { text = `Saved · ${st.message}`; cls = 'warn'; }
+  else text = 'Saved in this browser';
+  el.textContent = text;
+  el.className = `save-status ${cls}`;
+  el.title = text;
+  renderSyncControls();
+}
+
+const boardName = (rec) => rec?.name?.trim() || 'Untitled board';
+
+async function listBoards() {
+  if (!saving) return currentBoard ? [{ ...currentBoard, updatedAt: Date.now() }] : [];
+  return (await boardStore.all()).filter(b => !b.deleted && b.doc).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/** Opens a saved board (saving the current one first). */
+async function openBoard(id) {
+  await saveNow();
+  const rec = await boardStore.get(id);
+  if (!rec || rec.deleted || !rec.doc) return toast('That board isn’t available any more.');
+  try {
+    await hydrateBoard(rec.doc);
+  } catch (e) { toast(e.message); return; }
+  currentBoard = { id: rec.id, name: boardName(rec), createdAt: rec.createdAt };
+  await metaStore.set('current', rec.id).catch(() => {});
+  renderBoardMenu();
+}
+
+/** A new board: from a saved document (duplicate, backup), or empty with the device picker. */
+async function newBoard({ doc = null, name = 'Untitled board' } = {}) {
+  await saveNow();
+  const id = crypto.randomUUID(), now = Date.now();
+  currentBoard = { id, name, createdAt: now };
+  if (doc) await hydrateBoard(doc);
+  else {
+    await hydrateBoard({ format: FORMAT, baseLang: 'en', langs: ['en'], style: styleOut(defaultStyle()), colors: state.colors, models: state.models, groups: [] });
+  }
+  lastSavedJson = '';
+  if (saving) await saveNow();
+  await metaStore.set('current', id).catch(() => {});
+  renderBoardMenu();
+  if (!doc) openDeviceDialog('first');
+}
+
+async function renameBoard(name) {
+  if (!currentBoard) return;
+  currentBoard.name = name.trim().slice(0, 80) || 'Untitled board';
+  currentBoard.renamed = true;
+  await saveNow();
+  renderBoardMenu();
+}
+
+async function duplicateBoard() {
+  await saveNow();
+  const doc = await serializeBoard();
+  await newBoard({ doc, name: `${currentBoard?.name || 'Untitled board'} copy` });
+  toast('Duplicated. You’re now editing the copy.');
+}
+
+async function deleteBoard() {
+  if (!currentBoard) return;
+  if (!confirm(`Delete “${currentBoard.name}”? This can’t be undone${sync?.enabled ? ', and it’s removed from your other browsers too' : ''}.`)) return;
+  clearTimeout(saveTimer); saveTimer = null;
+  await saveChain;
+  const id = currentBoard.id;
+  const rec = await boardStore.get(id);
+  if (rec?.remoteVersion) await boardStore.put({ ...rec, doc: null, deleted: true, dirty: true, updatedAt: Date.now() });
+  else await boardStore.delete(id);
+  currentBoard = null;
+  const rest = await listBoards();
+  if (rest.length) await openBoard(rest[0].id); else await newBoard();
+  cleanupImages().catch(() => {});
+  sync?.schedule(300);
+  toast('Board deleted.');
+}
+
+// ---------- Backup files ----------
+// A .hhstudio file is a ZIP: board.json (the document) and images/<hash> (the captures as stored).
+async function exportBackup() {
+  await saveNow();
+  const doc = await serializeBoard();
+  const zip = new JSZip();
+  zip.file('board.json', JSON.stringify({ app: 'HearHere Studio', format: FORMAT, name: currentBoard?.name || 'Untitled board', doc }, null, 1));
+  let missing = 0;
+  for (const h of imageHashesOf(doc)) {
+    const blob = await blobForHash(h);
+    if (blob) zip.file(`images/${h}`, blob); else missing++;
+  }
+  const out = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(out);
+  a.download = `${(currentBoard?.name || 'board').replace(/[^\w\- ]+/g, '').trim() || 'board'}.hhstudio`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+  toast(missing ? `Backup saved, but ${missing} capture${missing > 1 ? 's' : ''} weren’t in this browser yet.` : 'Backup saved.');
+}
+
+async function importBackup(file) {
+  try {
+    const zip = await JSZip.loadAsync(file);
+    const meta = JSON.parse(await zip.file('board.json')?.async('string') || 'null');
+    if (!meta?.doc || meta.app !== 'HearHere Studio') throw new Error('That isn’t a HearHere Studio backup.');
+    for (const h of imageHashesOf(meta.doc)) {
+      const f = zip.file(`images/${h}`);
+      if (!f || !/^[0-9a-f]{64}$/.test(h)) continue;
+      const bytes = await f.async('uint8array');
+      const type = bytes[8] === 0x57 ? 'image/webp' : bytes[0] === 0xff ? 'image/jpeg' : 'image/png';
+      const blob = new Blob([bytes], { type });
+      if (saving) await storeVerified(h, blob);
+    }
+    await newBoard({ doc: meta.doc, name: meta.name || 'Imported board' });
+    toast(`Opened “${currentBoard.name}”.`);
+  } catch (e) {
+    console.error(e);
+    toast(e.message?.includes('HearHere') || e.message?.includes('newer') ? e.message : 'Couldn’t open that backup file.');
+  }
+}
+
+// ---------- Board menu ----------
+async function renderBoardMenu() {
+  const name = currentBoard?.name || 'Untitled board';
+  $('boardSwitchName').textContent = name;
+  if (document.activeElement !== $('boardName')) $('boardName').value = name;
+  const list = $('boardList');
+  list.innerHTML = '';
+  for (const b of await listBoards()) {
+    const row = el('button', 'menu-row board-row', '<span class="board-row-name"></span><span class="board-row-time"></span>');
+    row.type = 'button';
+    row.dataset.board = b.id;
+    row.querySelector('.board-row-name').textContent = boardName(b);
+    row.querySelector('.board-row-time').textContent = relTime(b.updatedAt);
+    if (b.id === currentBoard?.id) row.setAttribute('aria-current', 'true');
+    row.onclick = () => { $('boardMenu').hidePopover(); if (b.id !== currentBoard?.id) openBoard(b.id); };
+    list.appendChild(row);
+  }
+  $('boardDelete').disabled = !currentBoard;
+  renderSyncControls();
+}
+
+function renderSyncControls() {
+  const box = $('syncBox');
+  if (!box) return;
+  const st = sync?.status || { state: 'off' };
+  $('syncToggle').setAttribute('aria-pressed', String(!!sync?.enabled));
+  $('syncToggle').querySelector('.pro-tag').hidden = state.licensed;
+  $('syncDelete').hidden = !state.licensed;
+  const usage = st.usage ? ` · ${(st.usage.bytes / 1024 ** 2).toFixed(st.usage.bytes < 1024 ** 2 * 10 ? 1 : 0)} MB of ${Math.round(st.usage.limit / 1024 ** 3)} GB` : '';
+  $('syncNote').textContent = !state.licensed ? 'Pro keeps your boards in step across your browsers, end-to-end encrypted.'
+    : !sync?.enabled ? (st.state === 'error' ? st.message : 'Off. Boards are saved in this browser only.')
+    : st.state === 'error' ? st.message
+    : st.state === 'offline' ? 'Offline. Changes sync when you’re back.'
+    : st.state === 'syncing' ? `Syncing…${usage}` : `End-to-end encrypted · synced ${st.at ? relTime(st.at) : ''}${usage}`;
+}
+
+function setupBoards() {
+  $('boardName').addEventListener('change', (e) => renameBoard(e.target.value));
+  $('boardName').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
+  $('boardNew').onclick = () => { $('boardMenu').hidePopover(); newBoard(); };
+  $('boardDuplicate').onclick = () => { $('boardMenu').hidePopover(); duplicateBoard(); };
+  $('boardDelete').onclick = () => { $('boardMenu').hidePopover(); deleteBoard(); };
+  $('boardExport').onclick = () => { $('boardMenu').hidePopover(); exportBackup(); };
+  $('boardImport').onclick = () => { $('boardMenu').hidePopover(); $('backupFile').click(); };
+  $('backupFile').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importBackup(f); };
+  $('boardMenu').addEventListener('beforetoggle', (e) => {
+    if (e.newState !== 'open') return;
+    renderBoardMenu();
+    const r = $('boardSwitch').getBoundingClientRect();
+    $('boardMenu').style.left = `${Math.max(12, Math.min(innerWidth - 292, r.left))}px`;
+    $('boardMenu').style.top = `${r.bottom + 6}px`;
+  });
+  $('syncToggle').onclick = async () => {
+    if (!state.licensed) { $('boardMenu').hidePopover(); $('licensePop').showPopover(); return; }
+    if (!saving) return toast('This window can’t save boards, so it can’t sync them either.');
+    await sync.setEnabled(!sync.enabled);
+    renderSyncControls();
+  };
+  $('syncDelete').onclick = async () => {
+    if (!confirm('Delete everything synced for your license key from the server? Boards stay saved in this browser, and sync turns off. Turn sync off in your other browsers too, or they’ll stop syncing.')) return;
+    try { await sync.deleteRemote(); toast('Synced data deleted. Sync is off.'); }
+    catch (e) { toast(e.message || 'Couldn’t delete synced data.'); }
+    renderSyncControls();
+  };
+  // Save before the tab goes away; the debounce would otherwise lose the last half second.
+  addEventListener('pagehide', () => { saveNow(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveNow(); });
+  // Another tab saved this board: show its version unless this tab is mid-edit.
+  channel?.addEventListener('message', (e) => {
+    const m = e.data;
+    if (m?.type === 'saved' && m.tab !== TAB) onBoardChanged(m.id, 'changed');
+  });
+  setInterval(renderStatusLine, 60_000);
+}
+
+/** Called when another tab or sync changed a saved board. */
+async function onBoardChanged(id, how) {
+  // Synced boards arrived while this browser only has an untouched starter board: open them instead.
+  if (how === 'added' && currentBoard && id !== currentBoard.id && !saveTimer && !editing) {
+    const cur = await boardStore.get(currentBoard.id);
+    if (!cur || cur.pristine) {
+      const starter = currentBoard.id;
+      await openBoard(id);
+      if (cur && !cur.remoteVersion) await boardStore.delete(starter);
+      renderBoardMenu();
+      return;
+    }
+  }
+  if (how === 'removed' && id === currentBoard?.id) {
+    toast('This board was deleted in another browser.');
+    currentBoard = null;
+    const rest = await listBoards();
+    if (rest.length) await openBoard(rest[0].id); else await newBoard();
+    return;
+  }
+  if (id === currentBoard?.id && how === 'changed') {
+    if (saveTimer || editing || Date.now() - lastEditAt < 1500) return;   // busy here: sync keeps both versions instead
+    const rec = await boardStore.get(id);
+    if (!rec?.doc || JSON.stringify(rec.doc) === lastSavedJson) return;
+    const keepFocus = { ...focus };
+    await hydrateBoard(rec.doc);
+    currentBoard.name = boardName(rec);
+    if (state.groups.some(g => g.id === keepFocus.group)) { Object.assign(focus, keepFocus); refresh(); }
+  }
+  renderBoardMenu();
+}
+
+/** Opens the last board, or makes the first one from what boot set up. Returns true if a board was found. */
+async function setupSaving() {
+  saving = await openStore();
+  if (!saving) {
+    setSaveStatus('saved');
+    toast('This window can’t save boards (private browsing?). Use Export backup to keep your work.', true);
+    currentBoard = { id: crypto.randomUUID(), name: 'Untitled board', createdAt: Date.now() };
+    return false;
+  }
+  askPersistence();
+  sync = createSync({
+    licenseKey: () => (state.licensed ? storedLicenseKey() : ''),
+    isBusy: (id) => id === currentBoard?.id && (!!saveTimer || !!editing || Date.now() - lastEditAt < 1500),
+    flush: () => saveNow(),
+    boardChanged: (id, how) => onBoardChanged(id, how),
+    status: () => renderStatusLine(),
+  });
+  const all = await listBoards();
+  const wanted = await metaStore.get('current').catch(() => null);
+  const pick = all.find(b => b.id === wanted) || all[0];
+  if (pick) {
+    try {
+      await hydrateBoard(pick.doc);
+      currentBoard = { id: pick.id, name: boardName(pick), createdAt: pick.createdAt };
+    } catch (e) {
+      toast(e.message, true);
+      currentBoard = { id: crypto.randomUUID(), name: 'Untitled board', createdAt: Date.now() };
+    }
+  } else {
+    currentBoard = { id: crypto.randomUUID(), name: 'Untitled board', createdAt: Date.now() };
+  }
+  await metaStore.set('current', currentBoard.id).catch(() => {});
+  renderBoardMenu();
+  cleanupImages().catch(() => {});
+  return !!pick;
+}
+
 // ---------- Boot ----------
 async function boot() {
   const fromCheckout = new URLSearchParams(location.search).has('checkout');   // read before setupLicense tidies the address
@@ -1446,8 +1872,11 @@ async function boot() {
   setupLicense();
   $('exportBtn').onclick = exportZip;
   refresh({ fit: true });
+  const hadBoard = await setupSaving();
+  setupBoards();
+  sync?.init();
   // First visit: ask what the screenshots are for (not when coming back from checkout).
-  if (firstLaunch && !fromCheckout) openDeviceDialog('first');
-  window.__dss = { state, ready: true }; // used by the headless test
+  if (firstLaunch && !hadBoard && !fromCheckout) openDeviceDialog('first');
+  window.__dss = { state, ready: true, saveNow, board: () => currentBoard, sync: () => sync }; // used by the headless test
 }
 boot();

@@ -17,11 +17,20 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "studio", "migrations_dir": "migrations" }
   ],
+  // Pro sync: encrypted images, one object per image (<key hash>/<image id>). Create once:
+  // `wrangler r2 bucket create studio-sync`.
+  "r2_buckets": [
+    { "binding": "SYNC", "bucket_name": "studio-sync" }
+  ],
+  // Daily cleanup of synced images no board uses (functions/api/sync.js, cleanupSync).
+  "triggers": { "crons": ["23 3 * * *"] },
   "vars": {
     "ALLOWED_ORIGIN": "https://studio.hearhere.media",
     "POLAR_ORGANIZATION_ID": "35b48af0-b858-4962-a867-599c50c2167b",
     "POLAR_BENEFIT_ID": "c1ac5b59-0307-4ba3-83ac-18199cc3ea06",
-    "TRANSLATION_RUNS_PER_MONTH": "500"
+    "TRANSLATION_RUNS_PER_MONTH": "500",
+    "SYNC_BYTES_PER_KEY": "1073741824",
+    "SYNC_MAX_BOARDS": "200"
   },
   "observability": { "enabled": true }
 }

@@ -47,11 +47,17 @@
       <div id="board" class="board" hidden aria-label="Screenshots board">
         <div id="boardWorld" class="board-world"></div>
       </div>
-      <nav id="sidePanel" class="side-panel" aria-label="Devices and languages">
+      <nav id="sidePanel" class="side-panel" aria-label="Boards, devices and languages">
+        <button id="boardSwitch" class="side-board" type="button" popovertarget="boardMenu" title="Boards: switch, rename, back up">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="M5.5 6h5M5.5 9h3"/></svg>
+          <span id="boardSwitchName" class="side-board-name">Untitled board</span>
+          <svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg>
+        </button>
         <div class="side-title">Devices</div>
         <div id="deviceNav" class="side-list"></div>
         <div class="side-title">Languages</div>
         <div id="langNav" class="side-list"></div>
+        <div id="saveStatus" class="save-status" role="status" aria-live="polite"></div>
       </nav>
       <div id="zoomTools" class="zoom-tools" hidden>
         <span class="size-step" role="group" aria-label="Zoom">
@@ -140,6 +146,31 @@
   </div>
 
   <div id="groupMenu" class="pop group-menu" popover></div>
+  <div id="boardMenu" class="pop board-menu" popover>
+    <div class="card menu">
+      <label class="menu-label" for="boardName">Board name</label>
+      <input id="boardName" class="board-name-input" type="text" maxlength="80" spellcheck="false" autocomplete="off">
+      <hr class="menu-rule">
+      <div class="menu-label">Your boards</div>
+      <div id="boardList" class="board-list"></div>
+      <button id="boardNew" class="menu-row" type="button"><span>New board</span></button>
+      <button id="boardDuplicate" class="menu-row" type="button"><span>Duplicate</span></button>
+      <button id="boardDelete" class="menu-row danger" type="button"><span>Delete board</span></button>
+      <hr class="menu-rule">
+      <button id="boardExport" class="menu-row" type="button"><span>Export backup</span></button>
+      <button id="boardImport" class="menu-row" type="button"><span>Open backup…</span></button>
+      <input id="backupFile" type="file" accept=".hhstudio,.zip,application/zip" hidden>
+      <hr class="menu-rule">
+      <div id="syncBox" class="sync-box">
+        <button id="syncToggle" class="menu-row sync-toggle" type="button" aria-pressed="false">
+          <span class="switch" aria-hidden="true"></span><span>Sync across browsers</span><span class="pro-tag">Pro</span>
+        </button>
+        <p id="syncNote" class="sync-note"></p>
+        <button id="syncDelete" class="menu-row danger small" type="button" hidden><span>Delete synced data</span></button>
+      </div>
+    </div>
+  </div>
+
   <div id="licensePop" class="pop pop-down" popover>
     <div class="card">
       <div id="licenseForm" class="cell">
