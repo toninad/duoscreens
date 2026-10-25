@@ -1220,3 +1220,6 @@ input:disabled + .lang-box { opacity: .4; }
 .stale-dialog h2 { font-size: 26px; }
 .stale-actions { display: flex; flex-direction: column; gap: 8px; }
 .stale-actions .btn { width: 100%; padding: 12px 16px; font-size: 15px; }
+/* The Update row heads the language list: a tinted pill, so it reads as the thing to do next. */
+.side-panel .side-update { background: color-mix(in srgb, var(--orange) 9%, transparent); margin-bottom: 3px; }
+.side-panel .side-update:hover { background: color-mix(in srgb, var(--orange) 15%, transparent); }

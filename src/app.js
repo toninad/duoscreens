@@ -461,6 +461,14 @@ function renderSidePanel() {
 
   const cur = focusedLang();
   const stale = staleLangs();
+  if (stale.length) {
+    const up = el('button', 'side-row side-update', `${ICON.refresh}<span class="side-name"></span>`);
+    up.type = 'button';
+    up.querySelector('.side-name').textContent = stale.length === 1 ? `Update ${langName(stale[0])}` : `Update ${stale.length} languages`;
+    up.title = 'Translates only the lines that changed';
+    up.onclick = () => translateInto(stale);
+    langNav.appendChild(up);   // first, right under the heading, so it's never scrolled out of sight
+  }
   for (const lang of state.langs) {
     const b = row(langName(lang), lang === state.baseLang ? 'Original' : '', !focus.compare && lang === cur, () => setFocus({ lang, compare: false }));
     b.dataset.lang = lang;
@@ -486,14 +494,6 @@ function renderSidePanel() {
     b.disabled = true;
     markTranslating(b, lang);
     langNav.appendChild(b);
-  }
-  if (stale.length) {
-    const up = el('button', 'side-row side-update', `${ICON.refresh}<span class="side-name"></span>`);
-    up.type = 'button';
-    up.querySelector('.side-name').textContent = stale.length === 1 ? `Update ${langName(stale[0])}` : `Update ${stale.length} languages`;
-    up.title = 'Translates only the lines that changed';
-    up.onclick = () => translateInto(stale);
-    langNav.appendChild(up);
   }
   if (state.langs.length > 1) {
     const cmp = row('Compare all', '', focus.compare, () => setFocus({ compare: !focus.compare }), 'side-compare');
