@@ -17,12 +17,11 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "studio", "migrations_dir": "migrations" }
   ],
-  // Pro sync: encrypted images, one object per image (<key hash>/<image id>). To turn it on:
-  // enable R2 in the Cloudflare dashboard, run `wrangler r2 bucket create studio-sync`, then
-  // uncomment this. Until then /api/sync/* answers 503 and the app says sync isn't available yet.
-  // "r2_buckets": [
-  //   { "binding": "SYNC", "bucket_name": "studio-sync" }
-  // ],
+  // Pro sync: encrypted images, one object per image (<key hash>/<image id>). Without this binding
+  // /api/sync/* answers 503 and the app says sync isn't available yet.
+  "r2_buckets": [
+    { "binding": "SYNC", "bucket_name": "studio-sync" }
+  ],
   // Daily cleanup of synced images no board uses (functions/api/sync.js, cleanupSync).
   "triggers": { "crons": ["23 3 * * *"] },
   "vars": {
