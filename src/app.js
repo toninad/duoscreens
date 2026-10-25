@@ -1600,7 +1600,7 @@ async function listBoards() {
   return (await boardStore.all()).filter(b => !b.deleted && b.doc).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-/** Opens a saved board (saving the current one first). */
+/** Opens a saved board (saving the current one first) and shows the editor. */
 async function openBoard(id) {
   await saveNow();
   const rec = await boardStore.get(id);
@@ -1609,11 +1609,12 @@ async function openBoard(id) {
     await hydrateBoard(rec.doc);
   } catch (e) { toast(e.message); return; }
   currentBoard = { id: rec.id, name: boardName(rec), createdAt: rec.createdAt };
+  showHome(false);
+  renderBoardChrome();
   await metaStore.set('current', rec.id).catch(() => {});
-  renderBoardMenu();
 }
 
-/** A new board: from a saved document (duplicate, backup), or empty with the device picker. */
+/** A new board: from a saved document (backup), or empty with the device picker. */
 async function newBoard({ doc = null, name = 'Untitled board' } = {}) {
   await saveNow();
   const id = crypto.randomUUID(), now = Date.now();
@@ -1625,58 +1626,74 @@ async function newBoard({ doc = null, name = 'Untitled board' } = {}) {
   lastSavedJson = '';
   if (saving) await saveNow();
   await metaStore.set('current', id).catch(() => {});
-  renderBoardMenu();
+  showHome(false);
+  renderBoardChrome();
   if (!doc) openDeviceDialog('first');
 }
 
-async function renameBoard(name) {
-  if (!currentBoard) return;
-  currentBoard.name = name.trim().slice(0, 80) || 'Untitled board';
-  currentBoard.renamed = true;
-  await saveNow();
-  renderBoardMenu();
+/** The saved record of a board, with the open one saved first so it's current. */
+async function boardRecord(id) {
+  if (id === currentBoard?.id) await saveNow();
+  return boardStore.get(id);
 }
 
-async function duplicateBoard() {
-  await saveNow();
-  const doc = await serializeBoard();
-  await newBoard({ doc, name: `${currentBoard?.name || 'Untitled board'} copy` });
-  toast('Duplicated. You’re now editing the copy.');
+async function renameBoardById(id, name) {
+  name = name.trim().slice(0, 80) || 'Untitled board';
+  if (id === currentBoard?.id) {
+    currentBoard.name = name;
+    currentBoard.renamed = true;
+    await saveNow();
+  } else {
+    await boardStore.update(id, (cur) => cur && { ...cur, name, updatedAt: Date.now(), dirty: true, pristine: false });
+    sync?.schedule();
+  }
+  renderBoardChrome();
+  if (homeShown()) renderHome();
 }
 
-async function deleteBoard() {
-  if (!currentBoard) return;
-  if (!confirm(`Delete “${currentBoard.name}”? This can’t be undone${sync?.enabled ? ', and it’s removed from your other browsers too' : ''}.`)) return;
-  clearTimeout(saveTimer); saveTimer = null;
-  await saveChain;
-  const id = currentBoard.id;
-  const rec = await boardStore.get(id);
-  if (rec?.remoteVersion) await boardStore.put({ ...rec, doc: null, deleted: true, dirty: true, updatedAt: Date.now() });
+async function duplicateBoardById(id) {
+  const rec = await boardRecord(id);
+  if (!rec?.doc) return;
+  const now = Date.now();
+  await boardStore.put({ id: crypto.randomUUID(), name: `${boardName(rec)} copy`, doc: rec.doc, createdAt: now, updatedAt: now, remoteVersion: 0, dirty: true, deleted: false, pristine: false });
+  sync?.schedule();
+  if (homeShown()) renderHome();
+  toast(`Duplicated “${boardName(rec)}”.`);
+}
+
+async function deleteBoardById(id) {
+  const rec = await boardRecord(id);
+  if (!rec) return;
+  if (!confirm(`Delete “${boardName(rec)}”? This can’t be undone${sync?.enabled ? ', and it’s removed from your other browsers too' : ''}.`)) return;
+  if (id === currentBoard?.id) {
+    clearTimeout(saveTimer); saveTimer = null;
+    await saveChain;
+    currentBoard = null;   // the canvas shows nothing saved until another board is opened
+  }
+  if (rec.remoteVersion) await boardStore.put({ ...rec, doc: null, deleted: true, dirty: true, updatedAt: Date.now() });
   else await boardStore.delete(id);
-  currentBoard = null;
-  const rest = await listBoards();
-  if (rest.length) await openBoard(rest[0].id); else await newBoard();
   cleanupImages().catch(() => {});
   sync?.schedule(300);
+  if (homeShown()) renderHome();
   toast('Board deleted.');
 }
 
 // ---------- Backup files ----------
 // A .hhstudio file is a ZIP: board.json (the document) and images/<hash> (the captures as stored).
-async function exportBackup() {
-  await saveNow();
-  const doc = await serializeBoard();
+async function exportBackupById(id) {
+  const rec = await boardRecord(id);
+  if (!rec?.doc) return;
   const zip = new JSZip();
-  zip.file('board.json', JSON.stringify({ app: 'HearHere Studio', format: FORMAT, name: currentBoard?.name || 'Untitled board', doc }, null, 1));
+  zip.file('board.json', JSON.stringify({ app: 'HearHere Studio', format: FORMAT, name: boardName(rec), doc: rec.doc }, null, 1));
   let missing = 0;
-  for (const h of imageHashesOf(doc)) {
+  for (const h of imageHashesOf(rec.doc)) {
     const blob = await blobForHash(h);
     if (blob) zip.file(`images/${h}`, blob); else missing++;
   }
   const out = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(out);
-  a.download = `${(currentBoard?.name || 'board').replace(/[^\w\- ]+/g, '').trim() || 'board'}.hhstudio`;
+  a.download = `${boardName(rec).replace(/[^\w\- ]+/g, '').trim() || 'board'}.hhstudio`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
   toast(missing ? `Backup saved, but ${missing} capture${missing > 1 ? 's' : ''} weren’t in this browser yet.` : 'Backup saved.');
@@ -1703,66 +1720,165 @@ async function importBackup(file) {
   }
 }
 
-// ---------- Board menu ----------
-async function renderBoardMenu() {
-  const name = currentBoard?.name || 'Untitled board';
-  $('boardSwitchName').textContent = name;
-  if (document.activeElement !== $('boardName')) $('boardName').value = name;
-  const list = $('boardList');
-  list.innerHTML = '';
-  for (const b of await listBoards()) {
-    const row = el('button', 'menu-row board-row', '<span class="board-row-name"></span><span class="board-row-time"></span>');
-    row.type = 'button';
-    row.dataset.board = b.id;
-    row.querySelector('.board-row-name').textContent = boardName(b);
-    row.querySelector('.board-row-time').textContent = relTime(b.updatedAt);
-    if (b.id === currentBoard?.id) row.setAttribute('aria-current', 'true');
-    row.onclick = () => { $('boardMenu').hidePopover(); if (b.id !== currentBoard?.id) openBoard(b.id); };
-    list.appendChild(row);
+// ---------- Boards page ----------
+// All boards as cards, like a file browser. The editor opens the last board by default; the
+// "Boards" link at the top of the side panel (or #boards in the address) comes here.
+const homeShown = () => !$('home').hidden;
+let homeUrls = [];
+
+function showHome(on) {
+  if (on === homeShown() && on === document.body.classList.contains('home-mode')) { if (on) renderHome(); return; }
+  if (on) { saveNow(); if (editing) stopEditing(); clearSelection(); }
+  document.body.classList.toggle('home-mode', on);
+  $('home').hidden = !on;
+  placeBrand();
+  if (on) {
+    renderHome();
+    if (location.hash !== '#boards') history.pushState(null, '', '#boards');
+  } else if (location.hash === '#boards') {
+    history.pushState(null, '', location.pathname + location.search);
   }
-  $('boardDelete').disabled = !currentBoard;
+}
+
+const deviceLabel = (id) => { const d = deviceById(id); return d?.family === 'iphone' ? 'iPhone' : d?.name || id; };
+
+async function renderHome() {
+  const grid = $('homeGrid');
+  const all = await listBoards();
+  for (const u of homeUrls) URL.revokeObjectURL(u);
+  homeUrls = [];
+  grid.innerHTML = '';
+  const add = el('button', 'board-card new-card', `<span class="new-plus">${PLUS}</span><span>New board</span>`);
+  add.type = 'button';
+  add.onclick = () => newBoard();
+  grid.appendChild(add);
+  for (const b of all) {
+    const doc = b.doc;
+    const card = el('article', 'board-card');
+    card.dataset.board = b.id;
+    if (b.id === currentBoard?.id) card.classList.add('current');
+    const shots = (doc.groups || []).flatMap(g => g.shots || []);
+    const preview = el('button', 'board-preview');
+    preview.type = 'button';
+    preview.setAttribute('aria-label', `Open ${boardName(b)}`);
+    const bg = doc.style?.bg1 || '#F2EEEA';
+    preview.style.setProperty('--bg', bg);
+    const [r, g, b2] = (bg.match(/[0-9a-f]{2}/gi) || ['f2', 'ee', 'ea']).map(h => parseInt(h, 16));
+    preview.style.color = 0.299 * r + 0.587 * g + 0.114 * b2 > 140 ? 'rgba(18,18,18,.45)' : 'rgba(255,255,255,.6)';   // readable on the board's own ground
+    for (const h of imageHashesOf(doc).slice(0, 3)) {
+      const blob = await blobForHash(h);
+      if (!blob) continue;
+      const url = URL.createObjectURL(blob);
+      homeUrls.push(url);
+      const img = el('img');
+      img.alt = ''; img.src = url; img.loading = 'lazy';
+      preview.appendChild(img);
+    }
+    if (!preview.childElementCount) preview.innerHTML = '<span class="preview-empty">No screenshots yet</span>';
+    preview.onclick = () => openBoard(b.id);
+    const info = el('div', 'board-card-info', '<div class="board-card-name"></div><div class="board-card-meta"></div>');
+    info.querySelector('.board-card-name').textContent = boardName(b);
+    const devices = [...new Set((doc.groups || []).map(g => deviceLabel(g.device)))].join(' · ');
+    const langs = (doc.langs || []).length;
+    info.querySelector('.board-card-meta').textContent = [
+      devices, `${shots.length} screen${shots.length === 1 ? '' : 's'}`, langs > 1 ? `${langs} languages` : '', `edited ${relTime(b.updatedAt)}`,
+    ].filter(Boolean).join(' · ');
+    const more = el('button', 'board-more', ICON.more);
+    more.type = 'button'; more.title = 'Board options'; more.setAttribute('aria-label', `Options for ${boardName(b)}`);
+    more.onclick = (e) => { e.stopPropagation(); openCardMenu(b.id, more); };
+    card.append(preview, info, more);
+    grid.appendChild(card);
+  }
+  renderStatusLine();
+}
+
+let cardMenuFor = null;
+function openCardMenu(id, anchor) {
+  cardMenuFor = id;
+  const menu = $('cardMenu');
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = `${Math.max(12, Math.min(innerWidth - 232, r.right - 220))}px`;
+  menu.style.top = `${r.bottom + 6}px`;
+  menu.showPopover();
+}
+
+async function renameFromCard(id) {
+  const card = document.querySelector(`.board-card[data-board="${id}"]`);
+  const nameEl = card?.querySelector('.board-card-name');
+  if (!nameEl) return;
+  const input = el('input', 'board-card-input');
+  input.type = 'text'; input.maxLength = 80; input.value = nameEl.textContent;
+  input.setAttribute('aria-label', 'Board name');
+  nameEl.replaceWith(input);
+  input.focus(); input.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return; done = true;
+    if (save && input.value.trim() && input.value.trim() !== nameEl.textContent) await renameBoardById(id, input.value);
+    else renderHome();
+  };
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); });
+  input.addEventListener('blur', () => finish(true));
+}
+
+let titleTyping = false;   // the user is mid-rename in the side panel: don't overwrite what they type
+/** The board name at the top of the side panel. */
+function renderBoardChrome() {
+  if (!titleTyping) $('boardTitle').value = currentBoard?.name || 'Untitled board';
   renderSyncControls();
 }
 
 function renderSyncControls() {
-  const box = $('syncBox');
-  if (!box) return;
+  if (!$('syncBox')) return;
   const st = sync?.status || { state: 'off' };
   $('syncToggle').setAttribute('aria-pressed', String(!!sync?.enabled));
-  $('syncToggle').querySelector('.pro-tag').hidden = state.licensed;
-  $('syncDelete').hidden = !state.licensed;
+  $('syncDelete').hidden = !sync?.enabled && st.state !== 'synced';
   const usage = st.usage ? ` · ${(st.usage.bytes / 1024 ** 2).toFixed(st.usage.bytes < 1024 ** 2 * 10 ? 1 : 0)} MB of ${Math.round(st.usage.limit / 1024 ** 3)} GB` : '';
-  $('syncNote').textContent = !state.licensed ? 'Pro keeps your boards in step across your browsers, end-to-end encrypted.'
-    : !sync?.enabled ? (st.state === 'error' ? st.message : 'Off. Boards are saved in this browser only.')
+  const note = !sync?.enabled ? (st.state === 'error' ? st.message : 'Off. Boards are saved in this browser only.')
     : st.state === 'error' ? st.message
     : st.state === 'offline' ? 'Offline. Changes sync when you’re back.'
-    : st.state === 'syncing' ? `Syncing…${usage}` : `End-to-end encrypted · synced ${st.at ? relTime(st.at) : ''}${usage}`;
+    : st.state === 'syncing' ? `Syncing…${usage}`
+    : st.state === 'synced' ? `End-to-end encrypted · synced ${relTime(st.at)}${usage}` : 'End-to-end encrypted.';
+  $('syncNote').textContent = note;
+  $('homeSync').textContent = !saving ? 'This window can’t save boards. Use Export backup to keep your work.'
+    : state.licensed && sync?.enabled ? `Saved in this browser and synced across your browsers${st.state === 'synced' ? ` · ${relTime(st.at)}` : st.state === 'error' ? ` · ${st.message}` : ''}`
+    : 'Saved in this browser.';
 }
 
 function setupBoards() {
-  $('boardName').addEventListener('change', (e) => renameBoard(e.target.value));
-  $('boardName').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
-  $('boardNew').onclick = () => { $('boardMenu').hidePopover(); newBoard(); };
-  $('boardDuplicate').onclick = () => { $('boardMenu').hidePopover(); duplicateBoard(); };
-  $('boardDelete').onclick = () => { $('boardMenu').hidePopover(); deleteBoard(); };
-  $('boardExport').onclick = () => { $('boardMenu').hidePopover(); exportBackup(); };
-  $('boardImport').onclick = () => { $('boardMenu').hidePopover(); $('backupFile').click(); };
+  $('boardTitle').addEventListener('input', () => { titleTyping = true; });
+  $('boardTitle').addEventListener('blur', () => { titleTyping = false; renderBoardChrome(); });
+  $('boardTitle').addEventListener('change', (e) => { titleTyping = false; if (currentBoard) renameBoardById(currentBoard.id, e.target.value); });
+  $('boardTitle').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); });
+  $('toBoards').onclick = () => showHome(true);
+  $('homeNew').onclick = () => newBoard();
+  $('homeImport').onclick = () => $('backupFile').click();
   $('backupFile').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importBackup(f); };
-  $('boardMenu').addEventListener('beforetoggle', (e) => {
-    if (e.newState !== 'open') return;
-    renderBoardMenu();
-    const r = $('boardSwitch').getBoundingClientRect();
-    $('boardMenu').style.left = `${Math.max(12, Math.min(innerWidth - 292, r.left))}px`;
-    $('boardMenu').style.top = `${r.bottom + 6}px`;
+  $('cardMenu').addEventListener('click', (e) => {
+    const a = e.target.closest('[data-a]')?.dataset.a;
+    const id = cardMenuFor;
+    if (!a || !id) return;
+    $('cardMenu').hidePopover();
+    if (a === 'open') openBoard(id);
+    else if (a === 'rename') renameFromCard(id);
+    else if (a === 'duplicate') duplicateBoardById(id);
+    else if (a === 'export') exportBackupById(id);
+    else if (a === 'delete') deleteBoardById(id);
+  });
+  addEventListener('popstate', async () => {
+    if (location.hash === '#boards') showHome(true);
+    else if (homeShown()) {
+      if (currentBoard) showHome(false);
+      else { const all = await listBoards(); if (all.length) openBoard(all[0].id); else newBoard(); }
+    }
   });
   $('syncToggle').onclick = async () => {
-    if (!state.licensed) { $('boardMenu').hidePopover(); $('licensePop').showPopover(); return; }
     if (!saving) return toast('This window can’t save boards, so it can’t sync them either.');
     await sync.setEnabled(!sync.enabled);
     renderSyncControls();
   };
   $('syncDelete').onclick = async () => {
-    if (!confirm('Delete everything synced for your license key from the server? Boards stay saved in this browser, and sync turns off. Turn sync off in your other browsers too, or they’ll stop syncing.')) return;
+    if (!confirm('Delete everything synced for your license key from the server? Boards stay saved in this browser, and sync turns off here. Your other browsers stop syncing too.')) return;
     try { await sync.deleteRemote(); toast('Synced data deleted. Sync is off.'); }
     catch (e) { toast(e.message || 'Couldn’t delete synced data.'); }
     renderSyncControls();
@@ -1778,8 +1894,22 @@ function setupBoards() {
   setInterval(renderStatusLine, 60_000);
 }
 
+// Desktop editor: the brand and Add screenshots head the side panel, as one floating card. Phones
+// and the Boards page: they sit in the top bar.
+const narrowMq = matchMedia('(max-width: 860px)');
+function placeBrand() {
+  const inBar = narrowMq.matches || document.body.classList.contains('home-mode');
+  if (inBar) document.querySelector('.topbar').prepend($('brandBox'));
+  else $('sidePanel').prepend($('brandBox'));
+}
+
 /** Called when another tab or sync changed a saved board. */
 async function onBoardChanged(id, how) {
+  if (homeShown()) {   // the Boards page shows them all: just redraw it
+    if (how === 'removed' && id === currentBoard?.id) currentBoard = null;
+    renderHome();
+    return;
+  }
   if (how === 'removed' && id === currentBoard?.id) {
     toast('This board was deleted in another browser.');
     currentBoard = null;
@@ -1802,7 +1932,7 @@ async function onBoardChanged(id, how) {
       if (state.groups.some(g => g.id === keepFocus.group)) { Object.assign(focus, keepFocus); refresh(); }
     }
   }
-  renderBoardMenu();
+  renderBoardChrome();
 }
 
 /**
@@ -1810,7 +1940,7 @@ async function onBoardChanged(id, how) {
  * edited synced board instead and drop the starter.
  */
 async function leaveStarterBoard() {
-  if (!currentBoard || saveTimer || editing) return;
+  if (!currentBoard || saveTimer || editing || homeShown()) return;
   const cur = await boardStore.get(currentBoard.id);
   if (cur && !cur.pristine) return;
   const other = (await listBoards()).find(b => b.id !== currentBoard.id && !b.pristine);
@@ -1818,7 +1948,7 @@ async function leaveStarterBoard() {
   const starter = currentBoard.id;
   await openBoard(other.id);
   if (cur && !cur.remoteVersion) await boardStore.delete(starter);
-  renderBoardMenu();
+  renderBoardChrome();
 }
 
 /** Opens the last board, or makes the first one from what boot set up. Returns true if a board was found. */
@@ -1853,8 +1983,9 @@ async function setupSaving() {
     currentBoard = { id: crypto.randomUUID(), name: 'Untitled board', createdAt: Date.now() };
   }
   await metaStore.set('current', currentBoard.id).catch(() => {});
-  renderBoardMenu();
+  renderBoardChrome();
   cleanupImages().catch(() => {});
+  if (location.hash === '#boards') showHome(true);
   return !!pick;
 }
 
@@ -1876,8 +2007,6 @@ async function boot() {
   setupTranslate();
   // Desktop: the brand and Add screenshots head the side panel, as one floating card. Phones: they
   // stay in the top bar, and the panel is a strip of chips under it.
-  const narrowMq = matchMedia('(max-width: 860px)');
-  const placeBrand = () => (narrowMq.matches ? document.querySelector('.topbar').prepend($('brandBox')) : $('sidePanel').prepend($('brandBox')));
   placeBrand();
   narrowMq.addEventListener('change', placeBrand);
   setupLicense();

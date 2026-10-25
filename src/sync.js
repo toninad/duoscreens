@@ -110,7 +110,7 @@ export function createSync(app) {
     if (res.ok || res.status === 409 || res.status === 422) return Object.assign(data, { status: res.status });
     if (data.pro === false) throw new SyncError(`Sync stopped: ${data.error || 'license not active.'}`, { status: res.status, stop: true });
     if (res.status === 413) throw new SyncError(data.error || 'Sync storage is full.', { status: 413, stop: true });
-    if (res.status === 503) throw new SyncError('Sync isn’t available yet. Your boards are saved in this browser.', { status: 503, stop: true });
+    if (res.status === 503) throw new SyncError('Sync isn’t available right now. Your boards are saved in this browser, and sync will retry.', { status: 503 });
     throw new SyncError(data.error || `Sync failed (${res.status}).`, { status: res.status });
   }
 
@@ -288,7 +288,9 @@ export function createSync(app) {
   }
 
   async function init() {
-    enabled = !!(await meta.get('syncEnabled').catch(() => false));   // runs once the license is confirmed
+    // On by default for Pro; off only if it was turned off here. Runs once the license is confirmed.
+    const saved = await meta.get('syncEnabled').catch(() => undefined);
+    enabled = saved === undefined ? true : !!saved;
     report({ state: 'off' });
     if (enabled) schedule(500);
     setInterval(() => { if (enabled && document.visibilityState === 'visible') run(); }, 60_000);

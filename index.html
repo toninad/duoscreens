@@ -48,11 +48,12 @@
         <div id="boardWorld" class="board-world"></div>
       </div>
       <nav id="sidePanel" class="side-panel" aria-label="Boards, devices and languages">
-        <button id="boardSwitch" class="side-board" type="button" popovertarget="boardMenu" title="Boards: switch, rename, back up">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><path d="M5.5 6h5M5.5 9h3"/></svg>
-          <span id="boardSwitchName" class="side-board-name">Untitled board</span>
-          <svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg>
-        </button>
+        <div class="side-board">
+          <button id="toBoards" class="side-back" type="button" title="All boards" aria-label="All boards">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 3.5 5 8l4.5 4.5"/></svg><span>Boards</span>
+          </button>
+          <input id="boardTitle" class="side-board-title" type="text" maxlength="80" spellcheck="false" autocomplete="off" aria-label="Board name" title="Rename this board">
+        </div>
         <div class="side-title">Devices</div>
         <div id="deviceNav" class="side-list"></div>
         <div class="side-title">Languages</div>
@@ -87,6 +88,22 @@
       </div>
     </section>
 
+    <section id="home" class="home" hidden aria-labelledby="homeTitle">
+      <div class="home-inner">
+        <header class="home-head">
+          <div>
+            <h1 id="homeTitle">Boards<span class="dot">.</span></h1>
+            <p id="homeSync" class="home-sync"></p>
+          </div>
+          <div class="home-actions">
+            <button id="homeImport" class="btn" type="button">Open backup</button>
+            <button id="homeNew" class="btn primary" type="button">New board</button>
+          </div>
+        </header>
+        <div id="homeGrid" class="home-grid"></div>
+      </div>
+      <input id="backupFile" type="file" accept=".hhstudio,.zip,application/zip" hidden>
+    </section>
   </main>
   <footer class="legal-links"><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/refunds">Refunds</a><a href="mailto:feedback@hearhere.media">Contact</a></footer>
 
@@ -146,28 +163,14 @@
   </div>
 
   <div id="groupMenu" class="pop group-menu" popover></div>
-  <div id="boardMenu" class="pop board-menu" popover>
+  <div id="cardMenu" class="pop card-menu" popover>
     <div class="card menu">
-      <label class="menu-label" for="boardName">Board name</label>
-      <input id="boardName" class="board-name-input" type="text" maxlength="80" spellcheck="false" autocomplete="off">
+      <button class="menu-row" type="button" data-a="open"><span>Open</span></button>
+      <button class="menu-row" type="button" data-a="rename"><span>Rename</span></button>
+      <button class="menu-row" type="button" data-a="duplicate"><span>Duplicate</span></button>
+      <button class="menu-row" type="button" data-a="export"><span>Export backup</span></button>
       <hr class="menu-rule">
-      <div class="menu-label">Your boards</div>
-      <div id="boardList" class="board-list"></div>
-      <button id="boardNew" class="menu-row" type="button"><span>New board</span></button>
-      <button id="boardDuplicate" class="menu-row" type="button"><span>Duplicate</span></button>
-      <button id="boardDelete" class="menu-row danger" type="button"><span>Delete board</span></button>
-      <hr class="menu-rule">
-      <button id="boardExport" class="menu-row" type="button"><span>Export backup</span></button>
-      <button id="boardImport" class="menu-row" type="button"><span>Open backup…</span></button>
-      <input id="backupFile" type="file" accept=".hhstudio,.zip,application/zip" hidden>
-      <hr class="menu-rule">
-      <div id="syncBox" class="sync-box">
-        <button id="syncToggle" class="menu-row sync-toggle" type="button" aria-pressed="false">
-          <span class="switch" aria-hidden="true"></span><span>Sync across browsers</span><span class="pro-tag">Pro</span>
-        </button>
-        <p id="syncNote" class="sync-note"></p>
-        <button id="syncDelete" class="menu-row danger small" type="button" hidden><span>Delete synced data</span></button>
-      </div>
+      <button class="menu-row danger" type="button" data-a="delete"><span>Delete</span></button>
     </div>
   </div>
 
@@ -187,12 +190,19 @@
       </div>
       <div id="licenseActive" class="cell" hidden>
         <div class="pop-title">Pro is active<span class="dot">.</span></div>
-        <p class="hint pro-pitch">No watermark, translation is unlocked, and you can sync boards from the board menu. Pro is saved in this browser.</p>
+        <p class="hint pro-pitch">No watermark, translation is unlocked, and your boards sync across your browsers. Pro is saved in this browser.</p>
         <div class="key-row">
           <code id="activeKey" class="key-code"></code>
           <button id="activeCopy" class="btn small copy-btn" type="button"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="9" height="10" rx="2"/><path d="M13 4.5V4a1.5 1.5 0 0 0-1.5-1.5h-6A1.5 1.5 0 0 0 4 4v8a1.5 1.5 0 0 0 1.5 1.5H6"/></svg>Copy</button>
         </div>
         <p class="hint">Use the same key on up to 3 devices. It's also in your receipt email.</p>
+        <div id="syncBox" class="sync-box">
+          <button id="syncToggle" class="menu-row sync-toggle" type="button" aria-pressed="false">
+            <span class="switch" aria-hidden="true"></span><span>Sync boards across browsers</span>
+          </button>
+          <p id="syncNote" class="sync-note"></p>
+          <button id="syncDelete" class="link-btn danger" type="button">Delete synced data</button>
+        </div>
         <button id="forgetBtn" class="link-btn" type="button">Remove from this browser</button>
       </div>
     </div>

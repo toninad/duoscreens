@@ -64,7 +64,17 @@ async function open(label, { init } = {}) {
   return { context, page };
 }
 const ready = (page) => page.waitForFunction(() => window.__dss?.ready);
-const menu = async (page) => { if (!(await page.evaluate(() => document.getElementById('boardMenu').matches(':popover-open')))) await page.click('#boardSwitch'); };
+const title = (page) => page.inputValue('#boardTitle');
+async function rename(page, name) { await page.fill('#boardTitle', name); await page.press('#boardTitle', 'Enter'); await page.waitForFunction((n) => window.__dss.board()?.name === n, name); }
+async function home(page) { if (await page.isHidden('#home')) await page.click('#toBoards'); await page.waitForSelector('#home:not([hidden]) .board-card'); }
+const card = (name) => `.board-card:has(.board-card-name:text-is("${name}"))`;
+async function openCard(page, name) { await home(page); await page.click(`${card(name)} .board-preview`); await page.waitForFunction((n) => window.__dss.board()?.name === n && document.getElementById('home').hidden, name); }
+async function cardAction(page, name, action) { await home(page); await page.click(`${card(name)} .board-more`); await page.click(`#cardMenu [data-a="${action}"]`); }
+async function syncSwitch(page) {
+  if (!(await page.evaluate(() => document.getElementById('licensePop').matches(':popover-open')))) await page.click('#licenseBadge');
+  await page.click('#syncToggle');
+  await page.keyboard.press('Escape');
+}
 const state = (page, fn) => page.evaluate(fn);
 async function unlock(page) {
   await page.click('#licenseBadge');
@@ -112,45 +122,50 @@ try {
   });
   check(stored.length === 4 && stored.every(i => i.type === 'image/webp' && i.kb < 600), `Captures are stored compressed: ${stored.map(i => Math.round(i.kb) + ' KB').join(', ')}`);
 
-  // Boards: rename, new, switch, duplicate, delete.
-  await a.click('#boardSwitch');
-  await a.fill('#boardName', 'HearHere launch');
-  await a.press('#boardName', 'Enter');
-  await a.keyboard.press('Escape');
-  await a.waitForFunction(() => document.getElementById('boardSwitchName').textContent === 'HearHere launch');
-  check(true, 'A board can be renamed');
-  await a.click('#boardSwitch'); await a.click('#boardNew');
+  // Boards: rename in the side panel; new, open, duplicate and delete on the Boards page.
+  await rename(a, 'HearHere launch');
+  check(true, 'A board can be renamed from the side panel');
+  await a.click('#toBoards');
+  await a.waitForSelector('#home:not([hidden])');
+  check(await a.evaluate(() => location.hash) === '#boards' && await a.isVisible(card('HearHere launch')), 'The Boards page lists the board');
+  await a.click('#homeNew');
   await a.waitForSelector('#deviceDialog[open]');
   await a.click('.tile[data-family="iphone"] .tile-select'); await a.click('#deviceDone');
-  await a.waitForFunction(() => window.__dss.state.groups[0]?.device.startsWith('iphone'));
-  check(await state(a, () => window.__dss.state.shots.length) === 1, 'New board starts empty, with the device picked');
+  await a.waitForFunction(() => window.__dss.state.groups[0]?.device.startsWith('iphone') && document.getElementById('home').hidden);
+  check(await state(a, () => window.__dss.state.shots.length) === 1, 'New board opens empty, with the device picked');
   await setHeadline(a, 'Second board');
   check((await boardNames(a)).join() === 'HearHere launch,Untitled board', 'Both boards are saved');
-  await a.click('#boardSwitch');
-  await a.click('#boardList .board-row:has-text("HearHere launch")');
+  await openCard(a, 'HearHere launch');
   await a.waitForFunction(() => window.__dss.state.shots.length === 4);
-  check(await headline(a) === 'Kept after reload', 'Switching boards brings back the other one');
-  await a.click('#boardSwitch'); await a.click('#boardDuplicate');
-  await a.waitForFunction(() => document.getElementById('boardSwitchName').textContent === 'HearHere launch copy');
-  check((await boardNames(a)).length === 3, 'Duplicate makes a third board');
+  check(await headline(a) === 'Kept after reload', 'Opening a board from the Boards page brings it back');
+  await a.goBack();
+  await a.waitForSelector('#home:not([hidden])');
+  await a.goForward();
+  await a.waitForFunction(() => document.getElementById('home').hidden);
+  check(true, 'Back and forward move between the board and the Boards page');
+  await cardAction(a, 'HearHere launch', 'duplicate');
+  await a.waitForSelector(card('HearHere launch copy'));
+  check((await boardNames(a)).length === 3, 'Duplicate adds a copy on the Boards page');
   a.once('dialog', d => d.accept());
-  await a.click('#boardSwitch'); await a.click('#boardDelete');
-  await a.waitForFunction(() => document.getElementById('boardSwitchName').textContent !== 'HearHere launch copy');
+  await cardAction(a, 'HearHere launch copy', 'delete');
+  await a.waitForFunction(() => !document.querySelector('.board-card .board-card-name')?.closest('#homeGrid')?.textContent.includes('launch copy'));
   check((await boardNames(a)).join() === 'HearHere launch,Untitled board', 'Delete removes only that board');
+  await cardAction(a, 'Untitled board', 'rename');
+  await a.fill('.board-card-input', 'Second');
+  await a.press('.board-card-input', 'Enter');
+  await a.waitForSelector(card('Second'));
+  check((await boardNames(a)).join() === 'HearHere launch,Second', 'A board can be renamed on the Boards page');
 
   // Backup round trip.
-  await a.click('#boardSwitch');
-  await a.click('#boardList .board-row:has-text("HearHere launch")');
-  await a.waitForFunction(() => window.__dss.state.shots.length === 4);
-  await a.click('#boardSwitch');
-  const [dl] = await Promise.all([a.waitForEvent('download'), a.click('#boardExport')]);
+  const [dl] = await Promise.all([a.waitForEvent('download'), cardAction(a, 'HearHere launch', 'export')]);
   const backup = path.join(out, 'board.hhstudio');
   await dl.saveAs(backup);
   check((await fs.stat(backup)).size > 100_000, `Backup file holds the captures (${Math.round((await fs.stat(backup)).size / 1024)} KB)`);
+  await openCard(a, 'HearHere launch');
   const { context: ctxC, page: c } = await open('C');
   await c.click('.tile[data-family="iphone"] .tile-select'); await c.click('#deviceDone');
-  await c.click('#boardSwitch');
-  const [chooser] = await Promise.all([c.waitForEvent('filechooser'), c.click('#boardImport')]);
+  await home(c);
+  const [chooser] = await Promise.all([c.waitForEvent('filechooser'), c.click('#homeImport')]);
   await chooser.setFiles(backup);
   await c.waitForFunction(() => window.__dss.state.shots.length === 4 && window.__dss.state.shots.every(s => Object.keys(s.images).length));
   check(await headline(c) === 'Kept after reload', 'A backup opens in another browser with text and captures');
@@ -205,22 +220,21 @@ try {
   await ctxE.close();
 
   // ---------- Sync ----------
-  await unlock(a);
-  // Before R2 is set up on the server: turning sync on explains itself and switches back off.
+  // Pro turns sync on by itself. If the server can't store anything yet, it says so and keeps trying.
   const r2 = env.SYNC; delete env.SYNC;
-  await menu(a); await a.click('#syncToggle');
-  await a.waitForFunction(() => !window.__dss.sync().enabled && window.__dss.sync().status.state === 'error');
-  check((await a.textContent('#syncNote')).includes('isn’t available yet'), 'Without server storage, sync says it isn’t available yet');
+  await unlock(a);
+  await a.waitForFunction(() => window.__dss.sync().status.state === 'error', null, { timeout: 15_000 });
+  check(await a.evaluate(() => window.__dss.sync().enabled), 'Sync turns on by itself with Pro');
+  check((await syncState(a)).message.includes('isn’t available right now'), 'A server without storage is reported, and sync stays on to retry');
   env.SYNC = r2;
-  await a.keyboard.press('Escape');
-  await a.click('#boardSwitch');
-  check(!(await a.evaluate(() => window.__dss.sync().enabled)), 'Sync is off until turned on');
-  await a.click('#syncToggle');
+  await syncNow(a);
   await a.waitForFunction(() => window.__dss.sync().status.state === 'synced', null, { timeout: 30_000 })
     .catch(async e => { console.log('status', JSON.stringify(await syncState(a)), 'calls', syncCalls, a.errors); throw e; });
-  await a.keyboard.press('Escape');
-  check(env.DB.raw.prepare('SELECT COUNT(*) AS n FROM sync_boards').get().n === 2, 'Turning sync on uploads both boards');
+  check(env.DB.raw.prepare('SELECT COUNT(*) AS n FROM sync_boards').get().n === 2, 'Sync uploads both boards');
   check(env.SYNC.objects.size === 4, `Each capture is uploaded once (${env.SYNC.objects.size})`);
+  await a.click('#licenseBadge');
+  check((await a.textContent('#syncNote')).includes('End-to-end encrypted'), 'The Pro panel shows sync is on and encrypted');
+  await a.keyboard.press('Escape');
 
   // The server can't read anything.
   const plainText = JSON.stringify(env.DB.raw.prepare('SELECT * FROM sync_boards').all());
@@ -228,19 +242,17 @@ try {
   const anyWebp = [...env.SYNC.objects.values()].some(b => Buffer.from(b.subarray(8, 12)).toString() === 'WEBP');
   check(!anyWebp, 'Images are encrypted on the server');
 
-  // Browser B with the same key gets everything.
+  // Browser B with the same key gets everything, without touching a switch.
   const { context: ctxB, page: b } = await open('B');
   await b.click('.tile[data-family="iphone"] .tile-select'); await b.click('#deviceDone');
   await unlock(b);
-  await b.click('#boardSwitch'); await b.click('#syncToggle'); await b.keyboard.press('Escape');
   await b.waitForFunction(() => window.__dss.sync().status.state === 'synced', null, { timeout: 30_000 });
-  await b.waitForFunction(() => document.getElementById('boardSwitchName').textContent === 'HearHere launch', null, { timeout: 5000 }).catch(() => {});
-  check(await b.textContent('#boardSwitchName') === 'HearHere launch', 'B opens the most recently edited synced board');
+  await b.waitForFunction(() => window.__dss.board()?.name === 'HearHere launch', null, { timeout: 15_000 }).catch(() => {});
+  check(await title(b) === 'HearHere launch', `B opens the most recently edited synced board (${await title(b)})`);
   const namesB = await boardNames(b);
-  check(namesB.join() === 'HearHere launch,Untitled board', `B gets A's two boards, and drops its own untouched starter board: ${namesB.join(', ')}`);
+  check(namesB.join() === 'HearHere launch,Second', `B gets A's two boards, and drops its own untouched starter board: ${namesB.join(', ')}`);
   check(env.DB.raw.prepare('SELECT COUNT(*) AS n FROM sync_boards').get().n === 2, 'An untouched starter board is never uploaded');
-  await b.click('#boardSwitch');
-  await b.click('#boardList .board-row:has-text("HearHere launch")');
+  await openCard(b, 'HearHere launch');
   await b.waitForFunction(() => window.__dss.state.shots.length === 4 && window.__dss.state.shots.every(s => Object.keys(s.images).length));
   check(await headline(b) === 'Kept after reload', 'B opens the synced board with its captures');
 
@@ -252,10 +264,9 @@ try {
   check(true, 'An edit in one browser shows up in the other');
 
   // A rename travels too.
-  await menu(a); await a.fill('#boardName', 'HearHere 3.2'); await a.press('#boardName', 'Enter'); await a.keyboard.press('Escape');
-  await a.waitForFunction(() => document.getElementById('boardSwitchName').textContent === 'HearHere 3.2');
+  await rename(a, 'HearHere 3.2');
   await syncNow(a); await syncNow(b);
-  await b.waitForFunction(() => document.getElementById('boardSwitchName').textContent === 'HearHere 3.2', null, { timeout: 10_000 })
+  await b.waitForFunction(() => document.getElementById('boardTitle').value === 'HearHere 3.2', null, { timeout: 10_000 })
     .then(() => check(true, 'Renaming a board reaches the other browser'), () => check(false, 'Renaming a board reaches the other browser'));
 
   // A capture missing on the server: the board still opens, and editing it doesn't drop that capture.
@@ -264,9 +275,8 @@ try {
   const { context: ctxF, page: f } = await open('F');
   await f.click('.tile[data-family="iphone"] .tile-select'); await f.click('#deviceDone');
   await unlock(f);
-  await menu(f); await f.click('#syncToggle'); await f.keyboard.press('Escape');
   await f.waitForFunction(() => window.__dss.sync().status.state !== 'syncing', null, { timeout: 30_000 });
-  await f.waitForFunction(() => document.getElementById('boardSwitchName').textContent === 'HearHere 3.2', null, { timeout: 10_000 });
+  await f.waitForFunction(() => window.__dss.board()?.name === 'HearHere 3.2', null, { timeout: 10_000 });
   const lost = await f.evaluate(() => window.__dss.state.shots.filter(s => s.missing).length);
   check(lost === 1 && await headline(f) === 'Edited in B', `A board with a missing capture still opens (${lost} capture waiting)`);
   await setHeadline(f, 'Edited in F');
@@ -302,10 +312,10 @@ try {
 
   // A deletion travels.
   a.once('dialog', d => d.accept());
-  await a.click('#boardSwitch'); await a.click('#boardList .board-row:has-text("from another browser")');
-  await a.waitForFunction(() => document.getElementById('boardSwitchName').textContent.includes('from another browser'));
-  await a.click('#boardSwitch'); await a.click('#boardDelete');
-  await a.waitForFunction(() => !document.getElementById('boardSwitchName').textContent.includes('from another browser'));
+  const copyName = (await boardNames(a)).find(n => n.includes('(from another browser)'));
+  await cardAction(a, copyName, 'delete');
+  await a.waitForFunction(() => ![...document.querySelectorAll('.board-card-name')].some(e => e.textContent.includes('from another browser')));
+  await openCard(a, 'HearHere 3.2');
   await syncNow(a); await syncNow(b);
   check(!(await boardNames(b)).some(n => n.includes('(from another browser)')), 'Deleting a board removes it from the other browser');
 
@@ -320,7 +330,7 @@ try {
 
   // Delete synced data in A: B stops instead of uploading it all again.
   a.once('dialog', d => d.accept());
-  await a.click('#boardSwitch'); await a.click('#syncDelete');
+  await a.click('#licenseBadge'); await a.click('#syncDelete'); await a.keyboard.press('Escape');
   await a.waitForFunction(() => !window.__dss.sync().enabled);
   check(env.SYNC.objects.size === 0 && env.DB.raw.prepare('SELECT COUNT(*) AS n FROM sync_boards').get().n === 0, 'Delete synced data empties the server');
   await setHeadline(b, 'B after wipe');
@@ -330,8 +340,9 @@ try {
   check((await boardNames(b)).length >= 2, 'Its boards stay saved locally');
 
   // Revoked license: sync stops with a clear message.
-  await menu(a); await a.click('#syncToggle'); await a.keyboard.press('Escape');
+  await syncSwitch(a);
   await a.waitForFunction(() => window.__dss.sync().status.state === 'synced', null, { timeout: 30_000 });
+  check(await a.evaluate(() => window.__dss.sync().enabled), 'Sync can be switched back on from the Pro panel');
   polarStatus = 'revoked';
   env.DB.raw.prepare('UPDATE licenses SET checked_at = 0').run();
   await setHeadline(a, 'After refund');
