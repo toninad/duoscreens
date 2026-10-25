@@ -1243,24 +1243,15 @@ input:disabled + .lang-box { opacity: .4; }
 .device-dialog .tile { border-radius: 22px; background: var(--paper); box-shadow: 0 0 0 1px var(--chrome-border), 0 1px 2px rgba(18,18,18,.04); transition: box-shadow .25s, transform .25s var(--ease); }
 .device-dialog .tile:not(.taken):not(.soon):hover { transform: translateY(-2px); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 16%, transparent), 0 16px 30px -18px rgba(18,18,18,.35); }
 .device-dialog .tile.on { background: var(--paper); box-shadow: 0 0 0 2px var(--orange), 0 18px 36px -20px color-mix(in srgb, var(--orange) 70%, transparent); }
-.tile-art {
-  position: relative; height: 150px; margin: 8px 8px 0; border-radius: 16px; display: grid; place-items: center; overflow: hidden;
-  background: radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--card) 70%, var(--paper)), var(--card));
-}
-.tile-device { position: relative; display: block; filter: drop-shadow(0 10px 14px rgba(18,18,18,.18)); transition: transform .35s var(--ease); }
-.tile-device.tall { height: 122px; }
-.tile-device.wide { width: 74%; max-height: 118px; }
-.tile-device img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; user-select: none; }
-.tile-screen { position: absolute; background: linear-gradient(155deg, #ffd2b8 0%, #ff8a4f 38%, #fe5919 62%, #b8380a 100%); }
-.tile-screen::after { content: ''; position: absolute; inset: 0; background: linear-gradient(115deg, rgba(255,255,255,.38) 0%, rgba(255,255,255,0) 42%); }
-.tile-select:hover .tile-device, .tile.on .tile-device { transform: translateY(-3px) scale(1.03); }
-.tile.taken .tile-screen, .tile.soon .tile-screen { filter: grayscale(1); opacity: .6; }
+.device-dialog .tile-sketch { height: 140px; margin: 8px 8px 0; border-radius: 16px; background: radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--card) 55%, var(--paper)), var(--card)); }
+.device-dialog .tile-sketch svg { transition: transform .35s var(--ease); }
+.tile-select:hover .tile-sketch svg, .tile.on .tile-sketch svg { transform: translateY(-2px) scale(1.03); }
+.device-dialog .tile.on .tile-sketch { color: var(--ink); }
 .device-dialog .tile-text { padding: 14px 52px 16px 18px; }
 .device-dialog .tile-name { font-size: 15.5px; letter-spacing: -.01em; }
 .device-dialog .tile.on .tile-check { background: var(--orange); }
 @media (prefers-color-scheme: dark) {
   .device-dialog .tile, .device-dialog .tile.on { background: #2a2725; }
-  .tile-art { background: radial-gradient(120% 90% at 50% 0%, #3a3633, #211f1d); }
-  .tile-device { filter: drop-shadow(0 10px 16px rgba(0,0,0,.5)); }
+  .device-dialog .tile-sketch { background: radial-gradient(120% 90% at 50% 0%, #3a3633, #211f1d); }
 }
-@media (max-width: 560px) { .tile-art { height: 120px; } .tile-device.tall { height: 98px; } }
+@media (max-width: 560px) { .device-dialog .tile-sketch { height: 112px; } }

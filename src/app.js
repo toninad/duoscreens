@@ -1,6 +1,6 @@
 /* global Konva, JSZip */
 import { PRO, WATERMARK_TEXT, LANGUAGES } from './config.js';
-import { FAMILIES, DEVICES, TARGETS, SCREENS, targetById, deviceById, familyOf, loadFrame, availableFinishes, getFrame, previewFrame } from './devices.js';
+import { FAMILIES, DEVICES, TARGETS, SCREENS, targetById, deviceById, familyOf, loadFrame, availableFinishes, getFrame } from './devices.js';
 import { TEMPLATES, LAYOUTS, FONTS, templateById } from './templates.js';
 import { buildComposition } from './render.js';
 import { canvasToRgbPng } from './png.js';
@@ -1069,18 +1069,6 @@ const SCREEN_ICON = {
   'outer-landscape': '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 13.5v-6A2.5 2.5 0 0 1 5.5 5h9A2.5 2.5 0 0 1 17 7.5v6z"/><circle cx="5.7" cy="7.7" r="0.95" class="cam"/></svg>',
 };
 const CHECK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8.5l2.6 2.5L12 5.5"/></svg>';
-// The picker shows each family as the real device: its frame over a warm screen, sized by shape.
-function tileArt(famId) {
-  const model = DEVICES.find(d => d.id === state.models[famId] && d.family === famId) || DEVICES.find(d => d.family === famId);
-  const f = model && previewFrame(model.id, state.colors[model.id]);
-  if (!f) return SKETCH[famId] || '';
-  const { w, h, screen } = f.geo;
-  const pct = (v, of) => `${((v / of) * 100).toFixed(2)}%`;
-  return `<span class="tile-device ${w > h ? 'wide' : 'tall'}" style="aspect-ratio:${w}/${h}">`
-    + `<span class="tile-screen" style="left:${pct(screen.x, w)};top:${pct(screen.y, h)};width:${pct(screen.w, w)};height:${pct(screen.h, h)}"></span>`
-    + `<img src="${f.src}" alt="" draggable="false" decoding="async"></span>`;
-}
-
 const SKETCH = {
   // iPhone, drawn to the real proportions: body ≈ 0.49 : 1, corners ≈ 15% of the width,
   // a slim Dynamic Island ≈ 22% of the width, side buttons.
@@ -1092,8 +1080,13 @@ const SKETCH = {
     <path d="M73 8h60a14 14 0 0 1 14 14v76a14 14 0 0 1-14 14H73z"/><circle cx="134" cy="21" r="4.2" class="ink"/></svg>`,
   ipad: `<svg viewBox="0 0 220 120" aria-hidden="true">
     <rect x="46" y="14" width="128" height="92" rx="9"/><circle cx="110" cy="19" r="1.6" class="ink"/></svg>`,
+  // MacBook Pro: the lid with its notch, square at the hinge, over a wider, thin base with the
+  // thumb scoop, drawn to the 14″ proportions (lid ≈ 1.5 : 1).
   mac: `<svg viewBox="0 0 220 120" aria-hidden="true">
-    <rect x="52" y="12" width="116" height="76" rx="6"/><path d="M38 96h144l-5 7H43z"/><path d="M103 12h14v3.5h-14z" class="ink"/></svg>`,
+    <path d="M60 89V27a5.5 5.5 0 0 1 5.5-5.5h89A5.5 5.5 0 0 1 160 27v62"/>
+    <path d="M103.5 21.5h13v2.6a1.4 1.4 0 0 1-1.4 1.4h-10.2a1.4 1.4 0 0 1-1.4-1.4z" class="ink"/>
+    <path d="M45 89h130v2.6a3.4 3.4 0 0 1-3.4 3.4H48.4a3.4 3.4 0 0 1-3.4-3.4z"/>
+    <path d="M101 89v.9a1.6 1.6 0 0 0 1.6 1.6h14.8a1.6 1.6 0 0 0 1.6-1.6V89" class="btn"/></svg>`,
 };
 const PREFS_KEY = 'hhstudio.devices';
 let picker = null;   // { mode: 'first' | 'new' | 'add' | 'replace', groupId?, family, model }
@@ -1136,7 +1129,7 @@ function renderDeviceList() {
     const on = picker.family === fam.id;
     const tile = el('section', 'tile' + (on ? ' on' : '') + (free.length ? '' : ' taken'));
     tile.dataset.family = fam.id;
-    const pick = el('button', 'tile-select', `<span class="tile-art">${tileArt(fam.id)}</span>
+    const pick = el('button', 'tile-select', `<span class="tile-sketch">${SKETCH[fam.id] || ''}</span>
       <span class="tile-text"><span class="tile-name"></span><span class="tile-note"></span></span><span class="tile-check">${CHECK}</span>`);
     pick.type = 'button';
     pick.setAttribute('role', 'radio');
