@@ -140,9 +140,14 @@ function syncStyleInputs() {
   $('bg1').value = st.bg1;
   $('bg2').value = st.bg2;
   $('textColor').value = st.textColor;
+  $('bgHex').value = st.bg1.toUpperCase();
+  $('textHex').value = st.textColor.toUpperCase();
+  $('bg2').parentElement.style.setProperty('--chip', st.bg2);
+  for (const b of document.querySelectorAll('#bgSwatches button')) b.setAttribute('aria-pressed', String(b.dataset.c.toLowerCase() === st.bg1.toLowerCase()));
+  for (const b of document.querySelectorAll('#textSwatches button')) b.setAttribute('aria-pressed', String(b.dataset.c.toLowerCase() === st.textColor.toLowerCase()));
   $('fontSelect').value = st.font;
   $('sizeLabel').textContent = `${Math.round((st.headlineScale || 1) * 100)}%`;
-  $('textColor').parentElement.style.setProperty('--text', st.textColor);
+  $('textBtn').style.setProperty('--text', st.textColor);
 }
 
 // ---------- Text ----------
@@ -883,13 +888,39 @@ function setupInputs() {
   $('sizeDown').onclick = () => step(-0.1);
   $('sizeUp').onclick = () => step(0.1);
   for (const k of ['bg1', 'bg2', 'textColor']) $(k).oninput = (e) => applyStyle({ [k]: e.target.value });
-  // The custom colour popover opens right above its swatch.
-  $('stylePop').addEventListener('beforetoggle', (e) => {
-    if (e.newState !== 'open') return;
-    const r = $('customBg').getBoundingClientRect(), pop = $('stylePop');
-    pop.style.left = `${Math.max(12, Math.min(innerWidth - 252, r.left + r.width / 2 - 120))}px`;
-    pop.style.bottom = `${innerHeight - r.top + 14}px`;
-  });
+  // Colour popovers: palettes, hex fields, and each opens right above its button.
+  const shade = (hex, k) => '#' + hex.slice(1).match(/../g).map(h => Math.round(parseInt(h, 16) * k).toString(16).padStart(2, '0')).join('');
+  const setBg = (c) => applyStyle({ bg1: c, bg2: shade(c, 0.96) });
+  const palette = (id, colors, pick) => {
+    for (const c of colors) {
+      const b = el('button');
+      b.type = 'button'; b.dataset.c = c; b.title = c; b.setAttribute('aria-label', c);
+      b.style.background = c;
+      b.onclick = () => pick(c);
+      $(id).appendChild(b);
+    }
+  };
+  palette('bgSwatches', ['#FFFFFF', '#F2EEEA', '#F6E3D8', '#FBEBC8', '#DFE5DC', '#E7EAEF', '#E9E1F2', '#FE5919', '#2F5D50', '#1B2740', '#3B1F2B', '#1A1918'], setBg);
+  palette('textSwatches', ['#121212', '#6B645E', '#FFFFFF', '#FE5919', '#1B2740', '#2F5D50'], c => applyStyle({ textColor: c }));
+  const hexInput = (id, apply) => {
+    $(id).onchange = (e) => {
+      let v = e.target.value.trim(); if (!v.startsWith('#')) v = '#' + v;
+      if (/^#[0-9a-f]{6}$/i.test(v)) apply(v.toUpperCase()); else syncStyleInputs();
+    };
+    $(id).onkeydown = (e) => { if (e.key === 'Enter') e.target.blur(); };
+  };
+  hexInput('bgHex', setBg);
+  hexInput('textHex', c => applyStyle({ textColor: c }));
+  $('bg1').oninput = (e) => setBg(e.target.value);
+  for (const [pop, btn] of [['stylePop', 'customBg'], ['textPop', 'textBtn']]) {
+    $(pop).addEventListener('beforetoggle', (e) => {
+      $(btn).classList.toggle('open', e.newState === 'open');
+      if (e.newState !== 'open') return;
+      const r = $(btn).getBoundingClientRect();
+      $(pop).style.left = `${Math.max(12, Math.min(innerWidth - 232, r.left + r.width / 2 - 110))}px`;
+      $(pop).style.bottom = `${innerHeight - r.top + 14}px`;
+    });
+  }
   const fs = $('fontSelect');
   for (const [k, f] of Object.entries(FONTS)) fs.add(new Option(f.label, k));
   fs.onchange = (e) => applyStyle({ font: e.target.value });

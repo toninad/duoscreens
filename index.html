@@ -65,7 +65,7 @@
         <span class="dock-rule" aria-hidden="true"></span>
         <div class="dock-group text-tools" role="group" aria-label="Text">
           <select id="fontSelect" class="dock-select" aria-label="Font" title="Font"></select>
-          <label class="text-swatch" title="Text colour"><input id="textColor" type="color" aria-label="Text colour"><span aria-hidden="true">A</span></label>
+          <button id="textBtn" class="text-swatch" type="button" popovertarget="textPop" title="Text colour" aria-label="Text colour"><span aria-hidden="true">A</span></button>
           <span class="size-step" role="group" aria-label="Text size">
             <button id="sizeDown" type="button" title="Smaller text" aria-label="Smaller text"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8h8"/></svg></button>
             <output id="sizeLabel" aria-live="polite">100%</output>
@@ -79,10 +79,30 @@
   <footer class="legal-links"><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/refunds">Refunds</a><a href="mailto:feedback@hearhere.media">Contact</a></footer>
 
 
-  <div id="stylePop" class="pop bg-pop" popover>
+  <!-- Colour popovers: a palette, a hex field and the system picker for anything else. Their buttons
+       toggle them (click again to close). -->
+  <div id="stylePop" class="pop color-pop" popover>
     <div class="card">
-      <label class="cell row-cell"><span>Background</span><input id="bg1" type="color"></label>
-      <label class="cell row-cell"><span>Bottom tone</span><input id="bg2" type="color"></label>
+      <div class="color-title">Background</div>
+      <div id="bgSwatches" class="color-grid"></div>
+      <div class="color-row">
+        <label class="color-more" title="Any colour"><input id="bg1" type="color" aria-label="Background, any colour"></label>
+        <input id="bgHex" class="hex" type="text" spellcheck="false" maxlength="7" aria-label="Background hex">
+      </div>
+      <div class="color-row">
+        <span class="color-sub">Bottom tone</span>
+        <label class="color-chip" title="Bottom tone"><input id="bg2" type="color" aria-label="Bottom tone"></label>
+      </div>
+    </div>
+  </div>
+  <div id="textPop" class="pop color-pop" popover>
+    <div class="card">
+      <div class="color-title">Text</div>
+      <div id="textSwatches" class="color-grid"></div>
+      <div class="color-row">
+        <label class="color-more" title="Any colour"><input id="textColor" type="color" aria-label="Text, any colour"></label>
+        <input id="textHex" class="hex" type="text" spellcheck="false" maxlength="7" aria-label="Text hex">
+      </div>
     </div>
   </div>
 
