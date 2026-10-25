@@ -201,8 +201,14 @@ try {
   await page.click('#langBtn');
   await page.check('#langChecks label:has(input[value="de"])');
   await page.check('#langChecks label:has(input[value="ja"])');
+  await page.evaluate(() => {   // note the side panel's skeleton rows while the request is out
+    window.__skel = new Set();
+    new MutationObserver(() => document.querySelectorAll('#langNav .side-loading .side-name').forEach(n => window.__skel.add(n.textContent))).observe(document.getElementById('langNav'), { childList: true, subtree: true });
+  });
   await page.click('#translateBtn');
   await page.waitForFunction(() => ['de', 'ja'].every(l => window.__dss.state.langs.includes(l)));
+  check(await page.evaluate(() => [...window.__skel].sort().join()) === 'German,Japanese', 'While translating, the side panel shows a shimmering row per language');
+  check(await page.$$eval('#langNav .side-loading', l => l.length) === 0, 'The shimmer stops once the translations land');
   const deText = await page.evaluate(() => window.__dss.state.shots[1].text.de['duo/inner'].headline);
   check(deText === 'Mach da weiter, wo du aufgehört hast', `Translation applied: "${deText}"`);
 

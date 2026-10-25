@@ -1184,3 +1184,27 @@ input:disabled + .lang-box { opacity: .4; }
 .lang-status:empty { display: none; }
 @media (max-width: 860px) { .lang-pop { width: min(380px, calc(100vw - 20px)); } }
 .lang-head, .lang-search, .lang-all, .lang-foot, .lang-status { flex: none; }
+
+/* Translating: the language's row shimmers like a skeleton, with a placeholder bar where its meta sits. */
+.side-panel .side-row.side-loading { overflow: hidden; cursor: progress; }
+.side-panel .side-row.side-loading:disabled { color: var(--muted); }
+.side-panel .side-row.side-loading::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: linear-gradient(100deg, transparent 20%, color-mix(in srgb, var(--orange) 7%, transparent) 42%, var(--shimmer-hi) 50%, color-mix(in srgb, var(--orange) 7%, transparent) 58%, transparent 80%);
+  background-size: 250% 100%; animation: side-shimmer 1.5s linear infinite; animation-delay: var(--d, 0s);
+}
+:root { --shimmer-hi: rgba(255,255,255,.75); }
+@media (prefers-color-scheme: dark) { :root { --shimmer-hi: rgba(255,255,255,.06); } }
+.side-panel .side-row.side-loading:disabled .side-name { animation: side-in .35s var(--ease); }
+.side-skel { display: block; width: 34px; height: 8px; border-radius: 999px; background: var(--hairline); position: relative; overflow: hidden; }
+.side-skel::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--orange) 55%, transparent), transparent); transform: translateX(-100%); animation: side-skel 1.1s var(--ease) infinite; animation-delay: var(--d, 0s); }
+.side-row.side-loading .side-remove { display: none !important; }
+.side-row.side-loading .side-meta { display: block !important; }
+@keyframes side-shimmer { from { background-position: 125% 0; } to { background-position: -125% 0; } }
+@keyframes side-skel { to { transform: translateX(100%); } }
+@keyframes side-in { from { opacity: 0; transform: translateX(-6px); } }
+@media (prefers-reduced-motion: reduce) {
+  .side-panel .side-row.side-loading::after, .side-skel::after { animation: none; }
+  .side-panel .side-row.side-loading::after { background: color-mix(in srgb, var(--orange) 6%, transparent); }
+}
+@media (max-width: 860px) { .side-skel { width: 18px; } }

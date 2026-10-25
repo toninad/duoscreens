@@ -422,6 +422,16 @@ function buildStructure() {
   schedulePixelRatio();
 }
 
+// Languages with a translation in flight; their side-panel rows show a skeleton shimmer.
+const translating = new Set();
+function markTranslating(b, lang) {
+  b.classList.add('side-loading');
+  b.style.setProperty('--d', `${(0.12 * [...translating].indexOf(lang) - 1.5).toFixed(2)}s`);   // lower rows trail a little: a ripple down the list
+  b.setAttribute('aria-busy', 'true');
+  b.title = `Translating into ${b.querySelector('.side-name').textContent}…`;
+  b.querySelector('.side-meta').replaceChildren(el('span', 'side-skel'));
+}
+
 // The floating panel on the left: which device and which language the canvas shows.
 function renderSidePanel() {
   const nav = $('deviceNav'), langNav = $('langNav');
@@ -459,6 +469,15 @@ function renderSidePanel() {
       rm.onclick = (e) => { e.stopPropagation(); removeLang(lang); };
       b.appendChild(rm);
     }
+    if (translating.has(lang)) markTranslating(b, lang);
+    langNav.appendChild(b);
+  }
+  // Languages still on their way in: a placeholder row each, shimmering until the translation lands.
+  for (const lang of translating) {
+    if (state.langs.includes(lang)) continue;
+    const b = row(langName(lang), '', false, null);
+    b.disabled = true;
+    markTranslating(b, lang);
     langNav.appendChild(b);
   }
   if (state.langs.length > 1) {
@@ -1319,6 +1338,8 @@ function setupTranslate() {
       return out;
     });
     $('translateBtn').disabled = true;
+    for (const { langs } of requests) for (const lang of langs) translating.add(lang);
+    renderSidePanel();
     const done = [], failed = [];
     let usage, lines = 0, error = '';
     try {
@@ -1330,11 +1351,16 @@ function setupTranslate() {
           done.push(lang);
         }
         failed.push(...res.failed);
+        for (const lang of langs) translating.delete(lang);   // this batch has landed: its rows stop shimmering
+        for (const lang of Object.keys(res.translations)) if (!state.langs.includes(lang)) state.langs.push(lang);
+        renderSidePanel();
         lines = Math.max(lines, need.length);
         usage = res.usage;
       }
     } catch (e) {
       error = e.message;
+    } finally {
+      translating.clear();
     }
     for (const lang of [...done, ...upToDate]) if (!state.langs.includes(lang)) state.langs.push(lang);
     for (const i of $('langChecks').querySelectorAll('input')) if (done.includes(i.value) || upToDate.includes(i.value)) i.checked = false;
