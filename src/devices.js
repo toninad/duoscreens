@@ -39,7 +39,7 @@ export const DEVICES = [
     ],
     colors: [
       { id: 'night-sky', name: 'Night Sky', swatch: '#26304a' },
-      // { id: 'star-white', name: 'Star White', swatch: '#e6e2da' },   // add once vendor/frames/star-white/ has its four frames
+      { id: 'star-white', name: 'Star White', swatch: '#e6e2da' },
     ],
   },
   {
