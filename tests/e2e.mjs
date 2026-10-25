@@ -40,7 +40,7 @@ async function exportZip(page, label) {
 // Select a card by clicking its frame near the bottom-left corner (the top edge holds the card tools).
 async function selectCard(page, frameSel) {
   const box = await page.locator(frameSel).first().boundingBox();
-  await page.locator(frameSel).first().click({ position: { x: 6, y: 6 } });   // top corner: clear of text and any toolbar
+  await page.locator(frameSel).first().click({ position: { x: box.width / 2, y: 3 } });   // top edge: clear of the rounded corners, the text and any toolbar
 }
 
 const dimsOf = {};   // PNG name -> "WxH", filled by verifyZip
@@ -209,7 +209,14 @@ try {
   const after = await page.evaluate((k) => ({ h: window.__dss.state.shots[0].text.de[k].headline, other: window.__dss.state.shots[1].text.de['duo/inner'].headline }), edited);
   check(after.h === '[de] Fresh headline' && after.other === 'Mach da weiter, wo du aufgehört hast', 'The edit is translated and the other lines are kept');
   await page.keyboard.press('Escape');
-  check(await page.$$eval('.lang-row', rs => rs.map(r => r.dataset.lang).join()) === 'en,de,ja', 'Board shows a row per language');
+  check(await page.$$eval('#langNav [data-lang]', rs => rs.map(r => r.dataset.lang).join()) === 'en,de,ja', 'The side panel lists every language');
+  check(await page.$$eval('.lang-row', rs => rs.map(r => r.dataset.lang).join()) === 'en', 'The canvas shows one language at a time');
+  await page.click('#langNav [data-lang="de"]');
+  check(await page.$$eval('.lang-row', rs => rs.map(r => r.dataset.lang).join()) === 'de', 'Picking a language in the panel shows it on the canvas');
+  await page.click('#langNav .side-compare');
+  check(await page.$$eval('.lang-row', rs => rs.map(r => r.dataset.lang).join()) === 'en,de,ja', 'Compare all shows every language');
+  await page.click('#langNav .side-compare');
+  await page.click('#langNav [data-lang="en"]');
 
   // Pro export: 3 languages × 2 shots × 2 displays = 12, no watermark
   const pro = await exportZip(page, 'pro');
@@ -282,6 +289,9 @@ try {
   if (air) await fs.writeFile(path.join(out, 'iphone-air-01.png'), await all.zip.file(air).async('nodebuffer'));
 
   // Variations: duplicate the second screenshot, restyle only the copy.
+  check(await page.$$eval('.group', gs => gs.map(g => g.dataset.device).join()) === 'iphone-air', 'The canvas shows only the device picked in the panel');
+  await page.click('#deviceNav [data-device="duo"]');
+  await page.waitForSelector('.group[data-device="duo"]');
   await selectCard(page, '.lang-row[data-lang="en"] .shot-card:nth-child(2) .frame');
   await page.click('.lang-row[data-lang="en"] .shot-card:nth-child(2) [data-a="dup"]');
   await page.waitForFunction(() => window.__dss.state.groups[0].shots.length === 5);
@@ -289,7 +299,9 @@ try {
   await page.click('[data-template="ink"]');
   const styles = await page.evaluate(() => window.__dss.state.shots.map(s => s.style?.bg1 || 'base'));
   check(styles[0] === 'base' && styles[1] === 'base' && styles[2] !== 'base', 'Theme applies to the selected variation only');
-  check(await page.$$eval('.group[data-device="duo"] .lang-row[data-lang="de"] .shot-card', cs => cs.length) === 5, 'Variation appears in every language row');
+  await page.click('#langNav [data-lang="de"]');
+  check(await page.$$eval('.group[data-device="duo"] .lang-row[data-lang="de"] .shot-card', cs => cs.length) === 5, 'Variation appears in every language');
+  await page.click('#langNav .side-compare');
   await page.click('#zoomFit');
   await page.waitForTimeout(400);
   await page.screenshot({ path: path.join(out, 'board.png') });

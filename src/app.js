@@ -184,6 +184,16 @@ const K = 440 / 2853;                 // board units per export pixel: an inner 
 const view = { x: 0, y: 0, z: 1 };
 const frames = new Map();             // `${shotId}:${lang}:${target}` -> { stage, layer, el, shotId, lang, target, nodes, hits }
 let structureKey = '';
+// What the canvas shows: one device (group) in one language, or every language with "Compare all".
+const focus = { group: null, lang: null, compare: false };
+const focusedGroup = () => state.groups.find(g => g.id === focus.group) || state.groups[0];
+const focusedLang = () => (state.langs.includes(focus.lang) ? focus.lang : state.baseLang);
+function setFocus(patch) {
+  Object.assign(focus, patch);
+  if (patch.group != null) state.selection.clear();
+  if (editing) stopEditing();
+  refresh({ fit: true });
+}
 let editing = null;                   // { shotId, lang, target, key }
 
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -263,11 +273,12 @@ function fitBoard() {
   const world = $('boardWorld'), board = $('board');
   if (!world.offsetWidth || !world.offsetHeight) return;
   const narrow = matchMedia('(max-width: 860px)').matches;
-  const top = narrow ? 72 : 100, bottom = narrow ? 92 : 104, side = narrow ? 16 : 48;
+  const top = narrow ? 118 : 100, bottom = narrow ? 92 : 104, side = narrow ? 16 : 48;
   // Names above, captions below and the round + beside the cards keep their screen size outside
   // the measured layout, so leave room for them.
-  const plusW = narrow ? 0 : 70, langW = state.langs.length > 1 && !narrow ? 100 : 0, nameH = 40, capH = narrow ? 90 : 30;
-  const bw = board.clientWidth - side * 2 - plusW - langW, bh = board.clientHeight - top - bottom - nameH - capH;
+  const panelW = narrow ? 0 : 236;   // the floating side panel
+  const plusW = narrow ? 0 : 70, langW = focus.compare && state.langs.length > 1 && !narrow ? 100 : 0, nameH = 40, capH = narrow ? 90 : 30;
+  const bw = board.clientWidth - side * 2 - plusW - langW - panelW, bh = board.clientHeight - top - bottom - nameH - capH;
   // The board's labels keep their screen size, so the world's size depends on the zoom: settle it.
   let w, h;
   for (let i = 0; i < 4; i++) {
@@ -279,7 +290,7 @@ function fitBoard() {
     // afterwards leaves them alone, so nothing moves while you zoom.
     world.style.setProperty('--fit-ui', String(1 / view.z));
   }
-  view.x = side + langW + (bw - w * view.z) / 2;
+  view.x = side + panelW + langW + (bw - w * view.z) / 2;
   view.y = top + nameH + Math.max(0, (bh - h * view.z) / 2);
   applyView();
 }
@@ -289,13 +300,15 @@ function buildStructure() {
   frames.clear();
   const world = $('boardWorld');
   world.innerHTML = '';
-  for (const group of state.groups) {
+  const group = focusedGroup();
+  const langs = focus.compare && state.langs.length > 1 ? state.langs : [focusedLang()];
+  if (group) {
     const device = deviceById(group.device);
     const targets = targetsOfDevice(group.device);
     const section = el('section', 'group');
     section.dataset.device = group.device;
     section.appendChild(groupHead(group, device));
-    for (const lang of state.langs) {
+    for (const lang of langs) {
       const row = el('div', 'lang-row');
       row.dataset.lang = lang;
       const head = el('header', 'row-head', '<span class="row-name"></span>');
@@ -397,18 +410,62 @@ function buildStructure() {
         add.onclick = () => { group.shots.push(newShot(group)); refresh({ fit: true }); };
         cards.appendChild(add);
       }
-      if (state.langs.length > 1) row.append(head);   // a language label only once there are translations
+      if (langs.length > 1) row.append(head);   // language labels only when comparing
       row.append(cards);
       section.appendChild(row);
     }
     world.appendChild(section);
   }
-  // Another device: a new group below.
-  const more = el('button', 'add-group', `${PLUS}<span>Add device</span>${state.licensed ? '' : '<span class="pro-tag">Pro</span>'}`);
-  more.type = 'button';
-  more.onclick = () => (state.licensed ? openDeviceDialog('add') : $('licensePop').showPopover());
-  world.appendChild(more);
   schedulePixelRatio();
+}
+
+// The floating panel on the left: which device and which language the canvas shows.
+function renderSidePanel() {
+  const nav = $('deviceNav'), langNav = $('langNav');
+  nav.innerHTML = ''; langNav.innerHTML = '';
+  const row = (label, meta, current, onclick, cls = '') => {
+    const b = el('button', `side-row ${cls}`, '<span class="side-name"></span><span class="side-meta"></span>');
+    b.type = 'button';
+    b.querySelector('.side-name').textContent = label;
+    b.querySelector('.side-meta').textContent = meta;
+    if (current) b.setAttribute('aria-current', 'true');
+    b.onclick = onclick;
+    return b;
+  };
+  const g0 = focusedGroup();
+  for (const g of state.groups) {
+    const d = deviceById(g.device);
+    const b = row(d.family === 'iphone' ? 'iPhone' : d.name, String(g.shots.length), g === g0, () => setFocus({ group: g.id }));
+    b.dataset.group = g.id; b.dataset.device = g.device;
+    nav.appendChild(b);
+  }
+  const add = el('button', 'side-row side-add add-group', `${PLUS}<span>Add device</span>${state.licensed ? '' : '<span class="pro-tag">Pro</span>'}`);
+  add.type = 'button';
+  add.onclick = () => (state.licensed ? openDeviceDialog('add') : $('licensePop').showPopover());
+  nav.appendChild(add);
+
+  const cur = focusedLang();
+  for (const lang of state.langs) {
+    const b = row(langName(lang), lang === state.baseLang ? 'Original' : '', !focus.compare && lang === cur, () => setFocus({ lang, compare: false }));
+    b.dataset.lang = lang;
+    if (lang !== state.baseLang) {
+      const rm = el('span', 'side-remove', ICON.del);
+      rm.setAttribute('role', 'button'); rm.tabIndex = 0;
+      rm.title = `Remove ${langName(lang)}`; rm.setAttribute('aria-label', rm.title);
+      rm.onclick = (e) => { e.stopPropagation(); removeLang(lang); };
+      b.appendChild(rm);
+    }
+    langNav.appendChild(b);
+  }
+  if (state.langs.length > 1) {
+    const cmp = row('Compare all', '', focus.compare, () => setFocus({ compare: !focus.compare }), 'side-compare');
+    cmp.setAttribute('aria-pressed', String(focus.compare));
+    langNav.appendChild(cmp);
+  }
+  const tr = el('button', 'side-row side-add', `${PLUS}<span>Add languages</span>${state.licensed ? '' : '<span class="pro-tag">Pro</span>'}`);
+  tr.type = 'button';
+  tr.onclick = () => $('langPop').showPopover();
+  langNav.appendChild(tr);
 }
 
 // A group's header: the device, how many of its 10 App Store slots are used, its finish and (Duo)
@@ -421,6 +478,7 @@ function groupHead(group, device) {
   title.querySelector('.group-count').textContent = targets.length > 1
     ? targets.map(t => `${countOn(group, t.id)} ${t.display.label.toLowerCase()}`).join(' · ')
     : `${group.shots.length} of ${MAX_SHOTS}`;
+  if (state.langs.length > 1 && !focus.compare) title.querySelector('.group-count').textContent += ` · ${langName(focusedLang())}`;
   // Everything else about the group lives in one quiet menu, so the header stays a label.
   const more = el('button', 'group-btn icon group-more', ICON.more);
   more.type = 'button'; more.title = `${device.name} options`; more.setAttribute('aria-label', more.title);
@@ -463,12 +521,13 @@ function renderBoard({ fit = false } = {}) {
   for (const g of state.groups) if (!g.shots.length) g.shots.push(newShot(g));   // every group has a card to fill
   const has = true;
   $('empty').hidden = true;
-  for (const id of ['board', 'dock', 'boardTools', 'zoomTools', 'scopeLabel']) $(id).hidden = !has;
+  for (const id of ['board', 'dock', 'boardTools', 'zoomTools', 'scopeLabel', 'sidePanel']) $(id).hidden = !has;
   $('exportBtn').disabled = !state.shots.some(hasAnyImage);
   $('sampleBtn').hidden = state.shots.some(hasAnyImage);
   $('langLabel').textContent = state.langs.length > 1 ? `${state.langs.length} languages` : 'Translate';
   if (!has) return;
-  const key = JSON.stringify([state.groups.map(g => [g.device, g.shots.map(s => [s.id, s.target, s.pose])]), state.langs, state.colors, state.licensed]);
+  renderSidePanel();
+  const key = JSON.stringify([state.groups.map(g => [g.device, g.shots.map(s => [s.id, s.target, s.pose])]), state.langs, state.colors, state.licensed, focusedGroup()?.id, focusedLang(), focus.compare]);
   if (key !== structureKey) { buildStructure(); structureKey = key; requestAnimationFrame(schedulePixelRatio); }
   syncSelectionUI();
   drawAll();
@@ -880,6 +939,7 @@ function setupDropzone() {
       await loadFrame('duo', state.colors.duo);
       // The captures were taken unfolded in landscape, so show the inner display that way.
       g.shots = [...g.shots.filter(x => hasAnyImage(x) || x.edited), ...shots];   // samples replace untouched empty cards
+      focus.group = g.id;
       saveDevicePrefs();
       return refresh({ fit: true });
     }
@@ -1044,10 +1104,13 @@ async function confirmDevice() {
       g.device = id;
       for (const s of g.shots) { s.images = {}; delete s.target; s.pose = 'portrait'; }   // captures belong to the old device's screens
     }
+    focus.group = g.id;
   } else if (picker.mode === 'first') {
     state.groups = [newGroup(id)];
+    focus.group = state.groups[0].id;
   } else {
     state.groups.push(newGroup(id));
+    focus.group = state.groups.at(-1).id;
   }
   $('deviceDialog').close();
   saveDevicePrefs();
