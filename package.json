@@ -5,7 +5,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test:functions": "node --test tests/functions.test.mjs tests/sync.test.mjs",
-    "deploy": "wrangler deploy && wrangler d1 migrations apply DB --remote",
+    "deploy": "node scripts/deploy.mjs",
     "dev": "npm run build && wrangler d1 migrations apply DB --local && wrangler dev"
   },
   "dependencies": {
