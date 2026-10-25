@@ -148,8 +148,8 @@ test('translate: one request per language, counted against the allowance', async
   assert.deepEqual(r.body.usage, { runs: 2, limit: 5 });
   assert.equal(anthropicCalls.length, 2);
   const sent = anthropicCalls[0];
-  assert.equal(sent.model, 'claude-opus-5-5');
-  assert.equal(sent.fallbacks, 'default');
+  assert.equal(sent.model, 'claude-haiku-5-5');
+  assert.equal(sent.fallbacks, undefined);
   assert.equal(sent.output_config.format.type, 'json_schema');
   assert.ok(!JSON.stringify(sent).includes(VALID_KEY), 'license key is never sent to Anthropic');
 });

@@ -110,7 +110,7 @@ buyer a license key. The app never talks to Polar or Anthropic directly; two Clo
   it, so Pro unlocks on the spot. Works for a week after the checkout; the key is also in the receipt email.
 - **`POST /api/translate`** `{ key, device, sourceLanguage, targetLanguages[], texts[] }`: checks the license, then
   the monthly allowance (one run = all texts into one language), then calls Claude once per language with
-  structured JSON output and server-side refusal fallback. Only the text is sent, never images or the key.
+  structured JSON output (Claude Haiku 5.5 by default). Only the text is sent, never images or the key.
 
 Both accept calls only from the app's own origin and are rate-limited per IP.
 
@@ -126,7 +126,7 @@ Both accept calls only from the app's own origin and are rate-limited per IP.
 | Variable `POLAR_BENEFIT_ID` | optional: only keys from this benefit unlock |
 | Variable `ALLOWED_ORIGIN` | `https://studio.hearhere.media` |
 | Variable `TRANSLATION_RUNS_PER_MONTH` | optional, default `100` |
-| Variable `ANTHROPIC_MODEL` | optional, default `claude-opus-5-5` |
+| Variable `ANTHROPIC_MODEL` | optional, default `claude-haiku-5-5` |
 | Secret `POLAR_ACCESS_TOKEN` | Polar organization token with `license_keys:read`, `license_keys:write`, `checkouts:read` and `customer_sessions:write` |
 | Secret `ANTHROPIC_API_KEY` | Anthropic API key (use a separate workspace with a spend limit) |
 

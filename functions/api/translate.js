@@ -27,11 +27,11 @@ Return the translations in the same order as the input, one per input string.`;
 }
 
 async function translateOne(client, model, texts, source, target) {
-  const response = await client.beta.messages.create({
+  // Haiku: short marketing lines don't need a bigger model. It has no server-side refusal fallback,
+  // so a decline is reported per language below.
+  const response = await client.messages.create({
     model,
     max_tokens: 16000,
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',   // if the model declines, Anthropic retries on its recommended fallback model
     output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
     system: systemPrompt(source, target),
     messages: [{ role: 'user', content: JSON.stringify(texts) }],
@@ -75,7 +75,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-  const model = env.ANTHROPIC_MODEL || 'claude-opus-5-5';
+  const model = env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
   const source = LANGUAGES[sourceLanguage];
   const results = await Promise.allSettled(targetLanguages.map(l => translateOne(client, model, texts, source, LANGUAGES[l])));
 
