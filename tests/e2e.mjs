@@ -197,6 +197,7 @@ try {
   await page.click('#licenseBtn');
   await page.waitForFunction(() => window.__dss.state.licensed === true);
   check(true, 'Pro key unlocks');
+  check(await page.isHidden('#proPill') && await page.isVisible('#proMenu'), 'Pro moves next to the Studio name; the Get Pro pill goes');
   await page.keyboard.press('Escape');
 
   // Translate into German and Japanese in one go
@@ -334,6 +335,31 @@ try {
   await page.click('.lang-row[data-lang="en"] .shot-card:nth-child(2) [data-a="dup"]');
   await page.waitForFunction(() => window.__dss.state.groups[0].shots.length === 5);
   check((await page.textContent('#scopeLabel')) === 'iPhone Duo 3', 'The copy is selected and the dock scopes to it');
+  // Undo and redo: delete the copy, bring it back, delete it again; arrows walk the cards; ? lists the keys.
+  const cardsNow = () => page.evaluate(() => window.__dss.state.groups[0].shots.length);
+  await page.waitForTimeout(500);   // let the duplicate settle into its own undo step
+  await page.keyboard.press('Delete');
+  await page.waitForFunction(() => window.__dss.state.groups[0].shots.length === 4);
+  await page.keyboard.press('ControlOrMeta+z');
+  await page.waitForFunction(() => window.__dss.state.groups[0].shots.length === 5);
+  check(true, '⌘Z brings back a deleted card');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await page.waitForFunction(() => window.__dss.state.groups[0].shots.length === 4);
+  check(true, '⇧⌘Z deletes it again');
+  await page.click('#undoBtn');
+  await page.waitForFunction(() => window.__dss.state.groups[0].shots.length === 5);
+  check(await cardsNow() === 5 && !(await page.isDisabled('#redoBtn')), 'The undo button works too, and redo is offered');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('ArrowRight');
+  const first = await page.evaluate(() => [...window.__dss.state.selection].join());
+  await page.keyboard.press('ArrowRight');
+  const second = await page.evaluate(() => [...window.__dss.state.selection].join());
+  check(first && second && first !== second, 'Arrow keys step through the cards');
+  await page.keyboard.press('Shift+?');
+  check(await page.evaluate(() => document.getElementById('shortcutsPop').matches(':popover-open')), '? opens the keyboard shortcuts');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await selectCard(page, '.lang-row[data-lang="en"] .shot-card:nth-child(3) .frame');   // the copy again
   await page.click('[data-template="ink"]');
   const styles = await page.evaluate(() => window.__dss.state.shots.map(s => s.style?.bg1 || 'base'));
   check(styles[0] === 'base' && styles[1] === 'base' && styles[2] !== 'base', 'Theme applies to the selected variation only');
@@ -360,7 +386,7 @@ try {
   await page.screenshot({ path: path.join(out, 'welcome.png') });
   await page.click('#welcomeDone');
   check(!(await page.isVisible('#proWelcome')), 'Welcome closes');
-  await page.click('#licenseBadge');
+  await page.click('#proMenu');
   check(await page.isVisible('#licenseActive') && (await page.textContent('#activeKey')).startsWith(PRO_KEY.slice(0, 8)), 'License popover shows Pro active with the key');
   await page.keyboard.press('Escape');
   check(!(await page.evaluate(() => location.search)), 'Checkout parameters are removed from the address');

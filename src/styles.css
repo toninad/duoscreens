@@ -1297,3 +1297,40 @@ input:disabled + .lang-box { opacity: .4; }
 .pro-foot { padding: 2px 22px 16px; text-align: center; }
 @media (prefers-color-scheme: dark) { .pro-buy .btn.buy { box-shadow: 0 8px 20px -10px rgba(254,89,25,.6); } }
 .pro-key summary { gap: 6px; }
+
+/* Undo/redo sit in the zoom pill; ? opens the shortcuts list above it. */
+.zoom-tools .history button:disabled { opacity: .3; cursor: default; background: transparent; }
+.zoom-tools .zoom-help { width: 32px; height: 32px; min-width: 0; padding: 0; border-radius: 50%; font-size: 13px; color: var(--muted); }
+.zoom-tools .zoom-help:hover { color: var(--ink); }
+.shortcuts-pop { width: 300px; inset: auto 16px 74px auto; }
+.shortcuts-pop:popover-open { animation: rise .25s var(--ease); }
+.shortcuts-pop .card { border-radius: 18px; padding: 14px 8px 8px; }
+.shortcuts-title { padding: 0 12px 8px; font-weight: 650; font-size: 14px; }
+.shortcuts { list-style: none; margin: 0; padding: 0; }
+.shortcuts li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 12px; border-radius: 9px; font-size: 13px; color: var(--muted); }
+.shortcuts li:hover { background: var(--fill); color: var(--ink); }
+.shortcuts kbd { font: 600 11.5px/1 var(--sans); padding: 5px 7px; border-radius: 7px; background: var(--fill); color: var(--ink); box-shadow: inset 0 -1px 0 var(--hairline); white-space: nowrap; }
+@media (max-width: 860px) { .zoom-tools .zoom-help { display: none; } .zoom-tools .history { display: inline-flex !important; } }
+
+/* Top right: Get Pro and Export float as two separate pills, not one shared bar. */
+.topbar .topbar-actions { background: none !important; box-shadow: none !important; border: 0 !important; backdrop-filter: none; -webkit-backdrop-filter: none; padding: 0; gap: 10px; }
+.top-pill {
+  height: var(--bar); display: flex; align-items: center; padding: 0 5px; border-radius: 999px;
+  background: color-mix(in srgb, var(--paper) 92%, transparent); border: 1px solid var(--chrome-border); box-shadow: var(--chrome-shadow);
+  backdrop-filter: blur(20px) saturate(1.6); -webkit-backdrop-filter: blur(20px) saturate(1.6);
+}
+.top-pill[hidden] { display: none; }
+.top-pill .badge-pill { margin: 0; height: 34px; padding: 0 15px; font-size: 13px; }
+.top-pill .btn.primary { height: 34px; padding: 0 16px; font-size: 13px; }
+@media (prefers-color-scheme: dark) { .top-pill { background: color-mix(in srgb, #2a2725 94%, transparent); } }
+
+/* Pro, once you have it: a quiet "Pro ▾" beside the Studio name that opens the license panel. */
+.brand-pro {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: -2px; padding: 3px 6px 3px 7px; border: 0; border-radius: 7px; cursor: pointer;
+  background: transparent; font: 600 12.5px/1 var(--sans); color: var(--orange); letter-spacing: .01em; transition: background .2s;
+}
+.brand-pro[hidden] { display: none; }
+.brand-pro:hover, .brand-pro[aria-expanded=true] { background: color-mix(in srgb, var(--orange) 10%, transparent); }
+.brand-pro svg { width: 8px; height: 6px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .2s var(--ease); }
+#licensePop:popover-open ~ * .brand-pro svg { transform: rotate(180deg); }
+.brand-pro { margin-top: 2px; }

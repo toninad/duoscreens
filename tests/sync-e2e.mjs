@@ -71,7 +71,7 @@ const card = (name) => `.board-card:has(.board-card-name:text-is("${name}"))`;
 async function openCard(page, name) { await home(page); await page.click(`${card(name)} .board-preview`); await page.waitForFunction((n) => window.__dss.board()?.name === n && document.getElementById('home').hidden, name); }
 async function cardAction(page, name, action) { await home(page); await page.click(`${card(name)} .board-more`); await page.click(`#cardMenu [data-a="${action}"]`); }
 async function syncSwitch(page) {
-  if (!(await page.evaluate(() => document.getElementById('licensePop').matches(':popover-open')))) await page.click('#licenseBadge');
+  if (!(await page.evaluate(() => document.getElementById('licensePop').matches(':popover-open')))) await page.click('#proMenu');
   await page.click('#syncToggle');
   await page.keyboard.press('Escape');
 }
@@ -239,7 +239,7 @@ try {
     .catch(async e => { console.log('status', JSON.stringify(await syncState(a)), 'calls', syncCalls, a.errors); throw e; });
   check(env.DB.raw.prepare('SELECT COUNT(*) AS n FROM sync_boards').get().n === 2, 'Sync uploads both boards');
   check(env.SYNC.objects.size === 4, `Each capture is uploaded once (${env.SYNC.objects.size})`);
-  await a.click('#licenseBadge');
+  await a.click('#proMenu');
   check((await a.textContent('#syncNote')).includes('End-to-end encrypted'), 'The Pro panel shows sync is on and encrypted');
   await a.keyboard.press('Escape');
 
@@ -337,7 +337,7 @@ try {
 
   // Delete synced data in A: B stops instead of uploading it all again.
   a.once('dialog', d => d.accept());
-  await a.click('#licenseBadge'); await a.click('#syncDelete'); await a.keyboard.press('Escape');
+  await a.click('#proMenu'); await a.click('#syncDelete'); await a.keyboard.press('Escape');
   await a.waitForFunction(() => !window.__dss.sync().enabled);
   check(env.SYNC.objects.size === 0 && env.DB.raw.prepare('SELECT COUNT(*) AS n FROM sync_boards').get().n === 0, 'Delete synced data empties the server');
   await setHeadline(b, 'B after wipe');

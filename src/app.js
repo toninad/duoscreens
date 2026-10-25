@@ -463,7 +463,7 @@ function renderSidePanel() {
   }
   const add = el('button', 'side-row side-add add-group', `${PLUS}<span>Add device</span>${state.licensed ? '' : '<span class="pro-tag">Pro</span>'}`);
   add.type = 'button';
-  add.onclick = () => (state.licensed ? openDeviceDialog('add') : $('licensePop').showPopover());
+  add.onclick = () => (state.licensed ? openDeviceDialog('add') : showLicense());
   nav.appendChild(add);
 
   const cur = focusedLang();
@@ -773,6 +773,7 @@ function stopEditing() {
   const was = editing;
   editing = null;
   if (was?.lang === state.baseLang) renderSidePanel();   // the edit may have put translations behind
+  if (was && historyTimer) commitHistory();   // a finished edit is its own step
   const ed = $('inlineEditor');
   ed.hidden = true;
   document.body.appendChild(ed);
@@ -800,7 +801,134 @@ function setupInlineEditor() {
   ed.onblur = () => { setTimeout(() => { if (editing && document.activeElement !== ed) stopEditing(); }); };
 }
 
+// ---------- Undo and redo ----------
+// Snapshots of everything an edit can change (devices, cards, captures, words, translations, styles,
+// languages, finishes). Each burst of changes becomes one step once things go quiet for a moment, so
+// typing a headline undoes by phrase, not by letter. Captures are kept by reference: images never
+// change, so a snapshot costs a little JSON, not pixels. Selection, zoom and focus aren't steps.
+const HISTORY_MAX = 100;
+const undoStack = [], redoStack = [];
+let historyTimer = null;
+const imageIds = new WeakMap();
+let imageSeq = 0;
+const imageKey = (img) => { if (!imageIds.has(img)) imageIds.set(img, ++imageSeq); return imageIds.get(img); };
+
+function snapshot() {
+  const groups = state.groups.map(g => ({ id: g.id, device: g.device, shots: g.shots.map(s => ({
+    ...s, text: structuredClone(s.text || {}), tsrc: structuredClone(s.tsrc || {}),
+    ...(s.style ? { style: { ...s.style } } : {}), images: { ...(s.images || {}) }, ...(s.missing ? { missing: { ...s.missing } } : {}),
+  })) }));
+  const snap = { groups, baseLang: state.baseLang, langs: [...state.langs], style: { ...state.style }, colors: { ...state.colors }, models: { ...state.models } };
+  snap.key = JSON.stringify({ ...snap, style: styleOut(snap.style), groups: groups.map(g => ({ ...g, shots: g.shots.map(sh => ({
+    ...sh, style: styleOut(sh.style), images: Object.fromEntries(Object.entries(sh.images).map(([k, v]) => [k, v ? imageKey(v) : null])),
+  })) })) });
+  return snap;
+}
+
+/** Records the board as it is now, if it differs from the last step. */
+function commitHistory() {
+  clearTimeout(historyTimer); historyTimer = null;
+  if (!state.style || hydrating) return;
+  const snap = snapshot();
+  if (undoStack.at(-1)?.key === snap.key) return;
+  undoStack.push(snap);
+  if (undoStack.length > HISTORY_MAX + 1) undoStack.shift();
+  if (undoStack.length > 1) redoStack.length = 0;   // a new edit drops the steps you undid
+  syncHistoryButtons();
+}
+function noteChange() {
+  if (hydrating || restoringHistory) return;
+  clearTimeout(historyTimer);
+  historyTimer = setTimeout(commitHistory, 400);
+}
+/** A fresh board: its current state is where undo stops. */
+function resetHistory() {
+  undoStack.length = 0; redoStack.length = 0;
+  clearTimeout(historyTimer);
+  historyTimer = setTimeout(commitHistory, 0);
+  syncHistoryButtons();
+}
+
+let restoringHistory = false;
+async function restoreSnapshot(snap) {
+  restoringHistory = true;
+  try {
+    if (editing) stopEditing();
+    Object.assign(state.colors, snap.colors);
+    Object.assign(state.models, snap.models);
+    await Promise.all([...new Set(snap.groups.map(g => g.device))].map(id => loadFrame(id, state.colors[id])));
+    state.groups = snap.groups.map(g => ({ ...g, shots: g.shots.map(s => ({
+      ...s, text: structuredClone(s.text), tsrc: structuredClone(s.tsrc), ...(s.style ? { style: { ...s.style } } : {}), images: { ...s.images },
+      ...(s.missing ? { missing: { ...s.missing } } : {}),
+    })) }));
+    state.baseLang = snap.baseLang;
+    state.langs = [...snap.langs];
+    state.style = { ...snap.style };
+    const ids = new Set(state.shots.map(s => s.id));
+    state.selection = new Set([...state.selection].filter(id => ids.has(id)));
+    if (focus.group && !state.groups.some(g => g.id === focus.group)) focus.group = null;
+    structureKey = '';
+    renderLangChecks();
+    syncToolbar();
+    refresh();
+    saveDevicePrefs();
+  } finally {
+    restoringHistory = false;
+  }
+}
+
+async function undo() {
+  if (historyTimer) commitHistory();   // finish the step in progress first
+  if (undoStack.length < 2) return;
+  redoStack.push(undoStack.pop());
+  await restoreSnapshot(undoStack.at(-1));
+  syncHistoryButtons();
+}
+async function redo() {
+  if (historyTimer) commitHistory();
+  const snap = redoStack.pop();
+  if (!snap) return;
+  undoStack.push(snap);
+  await restoreSnapshot(snap);
+  syncHistoryButtons();
+}
+function syncHistoryButtons() {
+  const u = $('undoBtn'), r = $('redoBtn');
+  if (u) u.disabled = undoStack.length < 2;
+  if (r) r.disabled = !redoStack.length;
+}
+
 // ---------- Pan, zoom, select ----------
+// Shortcuts stay out of the way while someone types; pickers and sliders don't count as typing.
+function typingIn(el) {
+  if (!el?.closest) return false;
+  if (el.closest('textarea, select, [contenteditable=""], [contenteditable=true]')) return true;
+  const input = el.closest('input');
+  return !!input && !['color', 'range', 'checkbox', 'radio', 'button', 'submit', 'file'].includes(input.type);
+}
+/** ← → walk the cards in board order (the shown device first); nothing selected starts at the first. */
+function stepSelection(dir) {
+  const g = focusedGroup();
+  const order = [...(g ? g.shots : []), ...state.shots.filter(s => !g?.shots.includes(s))];
+  if (!order.length) return;
+  const cur = [...state.selection].at(-1);
+  const i = order.findIndex(s => s.id === cur);
+  const next = order[i < 0 ? (dir > 0 ? 0 : order.length - 1) : Math.max(0, Math.min(order.length - 1, i + dir))];
+  state.selection = new Set([next.id]);
+  syncSelectionUI();
+  document.querySelector(`.shot-card[data-id="${next.id}"]`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+}
+/** Enter: edit the selected card's headline, in the language on screen. */
+function editSelected() {
+  const id = [...state.selection][0], lang = focusedLang();
+  const f = [...frames.values()].find(x => x.shotId === id && x.lang === lang) || [...frames.values()].find(x => x.shotId === id);
+  if (f) startEditing(f, 'headline');
+}
+function toggleShortcuts() {
+  const pop = $('shortcutsPop');
+  if (pop.matches(':popover-open')) pop.hidePopover(); else pop.showPopover();
+}
+
 function setupBoard() {
   const board = $('board');
   board.addEventListener('wheel', (e) => {
@@ -851,18 +979,38 @@ function setupBoard() {
   board.addEventListener('pointercancel', end);
 
   document.addEventListener('keydown', (e) => {
-    if (e.target.closest?.('input, textarea, select, [contenteditable]') || $('board').hidden) return;
     const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); saveNow().then(() => toast('Saved in this browser.')); return; }   // never the browser's Save page
+    if (typingIn(e.target) || $('board').hidden || document.body.classList.contains('home-mode') || document.querySelector('dialog[open]')) return;
+    const key = e.key.toLowerCase();
+    if (mod && key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+    if ((mod && key === 'z' && e.shiftKey) || (mod && key === 'y')) { e.preventDefault(); redo(); return; }
+    if (mod && key === 'e') { e.preventDefault(); if (!$('exportBtn').disabled) $('exportBtn').click(); return; }
+    if (!mod && !e.altKey && e.key === '?') { e.preventDefault(); toggleShortcuts(); return; }
+    if (e.key === 'Enter' && state.selection.size === 1) { e.preventDefault(); editSelected(); return; }
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !mod) {
+      e.preventDefault();
+      const dir = e.key === 'ArrowLeft' ? -1 : 1;
+      if (e.altKey && state.selection.size === 1) moveShot([...state.selection][0], dir);
+      else stepSelection(dir);
+      return;
+    }
     if (e.key === 'Escape') clearSelection();
     else if ((mod && e.key === '0') || (e.shiftKey && e.key === '!')) { e.preventDefault(); fitBoard(); }
     else if (mod && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomBy(1.25); }
     else if (mod && e.key === '-') { e.preventDefault(); zoomBy(0.8); }
     else if (mod && e.key === 'a') { e.preventDefault(); state.selection = new Set(state.shots.map(s => s.id)); syncSelectionUI(); }
-    else if (mod && e.key === 'd' && state.selection.size === 1) { e.preventDefault(); duplicateShot([...state.selection][0]); }
+    else if (mod && key === 'd' && state.selection.size) { e.preventDefault(); for (const id of [...state.selection]) duplicateShot(id); }
     else if ((e.key === 'Backspace' || e.key === 'Delete') && state.selection.size) {
+      e.preventDefault();
       for (const id of [...state.selection]) deleteShot(id);
+      toast('Deleted. Press ⌘Z to undo.');
     }
   });
+  $('undoBtn').onclick = undo;
+  $('redoBtn').onclick = redo;
+  $('shortcutsBtn').onclick = toggleShortcuts;
+  syncHistoryButtons();
   $('zoomIn').onclick = () => zoomBy(1.25);
   $('zoomOut').onclick = () => zoomBy(0.8);
   $('zoomFit').onclick = fitBoard;
@@ -1354,7 +1502,7 @@ function staleLangs() {
 let translateRunning = false;
 /** Translates the board into `targets`, sending only the lines each one needs. */
 async function translateInto(targets) {
-  if (!state.licensed) { $('langPop').hidePopover(); $('licensePop').showPopover(); return; }
+  if (!state.licensed) { $('langPop').hidePopover(); showLicense(); return; }
   if (!state.shots.length) return toast('Add screenshots first.');
   if (translateRunning || !targets.length) return;
   translateRunning = true;
@@ -1459,6 +1607,8 @@ function applyLicense(valid, message) {
   $('licenseBadge').textContent = valid ? 'Pro' : 'Get Pro';
   $('licenseBadge').title = valid ? 'HearHere Studio Pro: your license' : 'Free: exports carry a small watermark. Pro removes it and adds translation, more devices and sync.';
   $('licenseBadge').classList.toggle('pro', valid);
+  $('proPill').hidden = valid;       // Pro moves next to the Studio name, quietly
+  $('proMenu').hidden = !valid;
   if (message) { $('licenseStatus').textContent = message; if (!valid) $('keyDetails').open = true; }
   syncTranslateButton();
   if ($('deviceDialog').open) renderDeviceList();
@@ -1468,7 +1618,27 @@ function applyLicense(valid, message) {
   renderBoard();
 }
 
+// The license panel opens under whatever opened it: the Get Pro pill (top right) or "Pro" by the name.
+function openLicensePop(anchor, fromElsewhere = false) {
+  const pop = $('licensePop');
+  if (pop.matches(':popover-open')) { if (!fromElsewhere) pop.hidePopover(); return; }
+  if (!fromElsewhere && licenseClosedAt >= licensePressAt && licenseAnchor === anchor) return;   // this press just light-dismissed it
+  licenseAnchor = anchor;
+  pop.showPopover();
+  const r = anchor.getBoundingClientRect(), w = pop.offsetWidth;
+  if (!r.width) { pop.style.left = pop.style.top = pop.style.right = ''; return; }   // opener hidden: the default spot, top right
+  const left = anchor.id === 'proMenu' ? r.left - 8 : r.right - w;
+  Object.assign(pop.style, { left: `${Math.max(12, Math.min(left, innerWidth - w - 12))}px`, right: 'auto', top: `${r.bottom + 10}px` });
+}
+/** Opens the license panel from somewhere else (a Pro-only button, checkout): under the visible opener. */
+const showLicense = () => openLicensePop(state.licensed ? $('proMenu') : $('licenseBadge'), true);
+let licenseAnchor = null, licenseClosedAt = -1, licensePressAt = 0;
+addEventListener('pointerdown', () => { licensePressAt = performance.now(); }, true);
+
 function setupLicense() {
+  $('licenseBadge').onclick = () => openLicensePop($('licenseBadge'));
+  $('proMenu').onclick = () => openLicensePop($('proMenu'));
+  $('licensePop').addEventListener('beforetoggle', (e) => { if (e.newState === 'closed') licenseClosedAt = performance.now(); });
   $('proPrice').textContent = PRO.price;
   const buy = $('buyBtn');
   if (PRO.checkoutUrl) buy.href = PRO.checkoutUrl;
@@ -1497,11 +1667,11 @@ function setupLicense() {
     const checkoutId = params.get('checkout_id');
     history.replaceState(null, '', location.pathname);
     if (!checkoutId) {
-      requestAnimationFrame(() => $('licensePop').showPopover());
+      requestAnimationFrame(() => showLicense());
       $('licenseStatus').textContent = 'Thanks for buying Pro! Paste the license key from your receipt email.'; $('keyDetails').open = true;
       return;
     }
-    requestAnimationFrame(() => $('licensePop').showPopover());
+    requestAnimationFrame(() => showLicense());
     $('licenseStatus').textContent = 'Thanks for buying Pro! Unlocking…'; $('keyDetails').open = true;
     $('licenseBtn').disabled = true;
     claimCheckout(checkoutId).then(r => {
@@ -1712,10 +1882,12 @@ async function hydrateBoard(doc) {
     lastSavedJson = JSON.stringify(await serializeBoard());
   } finally {
     hydrating = false;
+    resetHistory();
   }
 }
 
 function scheduleSave() {
+  noteChange();
   if (!saving || !currentBoard || hydrating) return;
   lastEditAt = Date.now();
   setSaveStatus('saving');
