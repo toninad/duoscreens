@@ -8,6 +8,11 @@
   "main": "worker/index.js",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
+  // Every uploaded version gets its own preview address (<version>-studio.<account>.workers.dev), so
+  // branches can be tried before they go live. Previews share the live database, bucket and secrets,
+  // and the API accepts calls from the address it is served on. Migrations only run on the production
+  // deploy (scripts/deploy.mjs), never from a preview.
+  "preview_urls": true,
   "assets": {
     "directory": "./_site",
     "binding": "ASSETS",
