@@ -2,6 +2,7 @@
 // Usage: cd tests && npm install && npx playwright install chromium && node e2e.mjs
 import { chromium } from 'playwright';
 import JSZip from 'jszip';
+import { PNG } from 'pngjs';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -14,7 +15,8 @@ const BASE = `http://127.0.0.1:${PORT}`;
 // Apple's App Store sizes per folder, portrait and landscape.
 const VALID = {
   'iPhone-Duo-inner': ['2007x2853', '2853x2007'], 'iPhone-Duo-outer': ['1398x2034', '2034x1398'],
-  'iPhone-6.9in': ['1320x2868'],   // every iPhone frame exports Apple's 6.9″ size
+  'iPhone-6.9in': ['1320x2868'],   // every iPhone frame exports Apple's 6.9″ size…
+  'iPhone-6.3in': ['1206x2622'],   // …and the 6.3″ size App Store Connect requires
 };
 const out = path.join(here, 'out');
 await fs.mkdir(out, { recursive: true });
@@ -322,9 +324,25 @@ try {
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(out, 'devices.png') });
   const all = await exportZip(page, 'devices');
-  const allPngs = await verifyZip(all.zip, 'devices', 18);
+  const allPngs = await verifyZip(all.zip, 'devices', 24);
   const air = allPngs.find(n => n.startsWith('en/iPhone-6.9in/01') && dimsOf[n] === '1320x2868');
   check(!!air, 'iPhone Air frame exports at the 6.9″ size, 1320×2868');
+  check(['01', '02'].every(n => dimsOf[`en/iPhone-6.3in/${n}.png`] === '1206x2622'), 'Every iPhone screenshot also exports at the required 6.3″ size, 1206×2622');
+  check((await all.zip.file('README.txt').async('string')).includes('iPhone-6.3in goes in "6.3-inch Display"'), 'The README says which App Store Connect slot each iPhone folder goes in');
+
+  // Replace a capture: the card's image button and the "Replace screenshot" overlay both swap it.
+  const capOf = () => page.evaluate(() => window.__dss.state.groups[1].shots[0].images.iphone);
+  await selectCard(page, '.group[data-device="iphone-air"] .lang-row[data-lang="en"] .shot-card:nth-child(1) .frame');
+  const hadCap = await page.evaluate(() => { window.__capBefore = window.__dss.state.groups[1].shots[0].images.iphone; return true; });
+  const [fcR] = await Promise.all([page.waitForEvent('filechooser'), page.click('.group[data-device="iphone-air"] .shot-card:nth-child(1) .card-acts [data-a="image"]')]);
+  const other = new PNG({ width: 660, height: 1434 });   // a different capture: solid orange
+  for (let i = 0; i < other.data.length; i += 4) other.data.set([254, 89, 25, 255], i);
+  await fs.writeFile(path.join(out, 'replacement.png'), PNG.sync.write(other));
+  await fcR.setFiles(path.join(out, 'replacement.png'));
+  await page.waitForFunction(() => window.__dss.state.groups[1].shots[0].images.iphone !== window.__capBefore);
+  check(hadCap && !!(await capOf()), 'The card toolbar replaces a screenshot');
+  check(await page.$('.group[data-device="iphone-air"] .shot-card.selected .screen-replace'), 'A selected card offers "Replace screenshot" over its screen');
+  await page.keyboard.press('Escape');
   if (air) await fs.writeFile(path.join(out, 'iphone-air-01.png'), await all.zip.file(air).async('nodebuffer'));
 
   // Variations: duplicate the second screenshot, restyle only the copy.

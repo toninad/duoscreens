@@ -215,6 +215,7 @@ const ICON = {
   left: svg('M10 4l-4 4 4 4'), right: svg('M6 4l4 4-4 4'), del: svg('M5 5l6 6M11 5l-6 6'),
   more: svg('M4 8h.01M8 8h.01M12 8h.01'),
   check: svg('M3.5 8.5l3 3 6-7'),
+  image: svg('M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 11.5zM3.5 10.5l2.8-2.8 2.2 2.2 1.5-1.5 2.5 2.5M10 6h.01'),
 };
 
 let moveTimer;
@@ -340,11 +341,13 @@ function buildStructure() {
         const tools = el('div', 'card-acts', `
             <button type="button" data-a="left" title="Move left" aria-label="Move left" ${i === 0 ? 'disabled' : ''}>${ICON.left}</button>
             <button type="button" data-a="right" title="Move right" aria-label="Move right" ${i === group.shots.length - 1 ? 'disabled' : ''}>${ICON.right}</button>
+            <button type="button" data-a="image" title="${imageFor(shot, targetOf(shot).display.screen) ? 'Replace screenshot' : 'Add screenshot'}" aria-label="${imageFor(shot, targetOf(shot).display.screen) ? 'Replace screenshot' : 'Add screenshot'}">${ICON.image}</button>
             <button type="button" data-a="dup" title="Duplicate as a variation" aria-label="Duplicate" ${countOn(group, targetOf(shot).id) >= MAX_SHOTS ? 'disabled' : ''}>${ICON.dup}</button>
             <button type="button" class="del" data-a="del" title="Remove" aria-label="Remove">${ICON.del}</button>`);
         tools.onclick = (e) => {
           const a = e.target.closest('button')?.dataset.a;
-          if (a === 'dup') duplicateShot(shot.id);
+          if (a === 'image') pickImageFor(shot.id, targetOf(shot).display.screen);
+          else if (a === 'dup') duplicateShot(shot.id);
           else if (a === 'left') moveShot(shot.id, -1);
           else if (a === 'right') moveShot(shot.id, 1);
           else if (a === 'del') deleteShot(shot.id);
@@ -715,6 +718,13 @@ function placeTextHits(f) {
     Object.assign(add.style, { left: `${scr.x * K}px`, top: `${scr.y * K}px`, width: `${scr.width * K}px`, height: `${scr.height * K}px` });
     add.onclick = (e) => { e.stopPropagation(); pickImageFor(f.shotId, targetById(f.target).display.screen); };
     box.appendChild(add);
+  } else if (scr) {   // a filled screen: on a selected card, hovering it offers to swap the capture
+    const rep = el('button', 'screen-replace', `${ICON.image}<span>Replace screenshot</span>`);
+    rep.type = 'button';
+    rep.setAttribute('aria-label', `Replace the screenshot on ${targetLabel(targetById(f.target))}`);
+    Object.assign(rep.style, { left: `${scr.x * K}px`, top: `${scr.y * K}px`, width: `${scr.width * K}px`, height: `${scr.height * K}px` });
+    rep.onclick = (e) => { e.stopPropagation(); pickImageFor(f.shotId, targetById(f.target).display.screen); };
+    box.appendChild(rep);
   }
   for (const key of ['headline', 'subheadline']) {
     const node = f.nodes[key];
@@ -940,7 +950,7 @@ function setupBoard() {
   const pointers = new Map();
   let drag = null, pinch = null;
   board.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.text-hit, .screen-add, .add-screen, .add-group, .group-head, .card-pose, .row-remove, .inline-editor')) return;
+    if (e.target.closest('.text-hit, .screen-add, .screen-replace, .add-screen, .add-group, .group-head, .card-pose, .row-remove, .inline-editor')) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     board.setPointerCapture(e.pointerId);
     if (pointers.size === 2) {
@@ -1705,8 +1715,8 @@ function setupLicense() {
 // portrait and landscape screenshots in the same slot.
 const folderName = (t) => familyOf(t.device)?.folder || `${t.device.name.replace(/\s+/g, '-')}${t.display.label ? '-' + t.display.id : ''}`;
 
-async function renderToPng(shot, tid, lang) {
-  const size = sizeOf(tid, shot);
+async function renderToPng(shot, tid, lang, sizeOverride = null) {
+  const size = sizeOverride || sizeOf(tid, shot);
   const host = document.createElement('div');
   host.style.cssText = 'position:fixed;left:-99999px;top:0;';
   document.body.appendChild(host);
@@ -1757,23 +1767,33 @@ async function exportZip() {
   let skipped = 0;
   const count = {};   // numbered per folder, so skipped empty frames leave no gaps
   for (const lang of state.langs) state.shots.forEach(s => targetsOf(s).forEach(t => {
-    if (imageFor(s, t.display.screen)) jobs.push({ lang, s, i: (count[lang + t.id] = (count[lang + t.id] || 0) + 1) - 1, t });
-    else if (lang === state.baseLang) skipped++;
+    if (!imageFor(s, t.display.screen)) { if (lang === state.baseLang) skipped++; return; }
+    const i = (count[lang + t.id] = (count[lang + t.id] || 0) + 1) - 1;
+    jobs.push({ lang, s, i, t, folder: folderName(t) });
+    // Extra App Store sizes drawn from the same card (iPhone: the required 6.3″ class too).
+    for (const x of t.display.alsoExport || []) jobs.push({ lang, s, i, t, folder: x.folder, size: x.size[poseOf(s)] });
   }));
   if (!jobs.length) { btn.disabled = false; return toast('Add a screenshot to a frame first.'); }
   showProgress(0, jobs.length);
   try {
     let done = 0;
-    for (const { lang, s, i, t } of jobs) {
-      const blob = await renderToPng(s, t.id, lang);
+    for (const { lang, s, i, t, folder: dir, size } of jobs) {
+      const blob = await renderToPng(s, t.id, lang, size);
       const folder = state.langs.length > 1 ? `${lang}/` : '';
-      zip.file(`${folder}${folderName(t)}/${String(i + 1).padStart(2, '0')}.png`, blob);
+      zip.file(`${folder}${dir}/${String(i + 1).padStart(2, '0')}.png`, blob);
       showProgress(++done, jobs.length);
       await new Promise(r => setTimeout(r)); // keep UI responsive
     }
     zip.file('README.txt', `App Store screenshots — made with HearHere Studio\n\n` +
-      targets.map(t => { const sz = t.display.size[t.display.poses?.[0] || 'portrait']; return `${targetLabel(t)}: ${folderName(t)} (${sz.width} × ${sz.height}${t.display.poses ? '' : ' or landscape'})`; }).join('\n') +
-      `\n\nUpload each folder to the matching device size in App Store Connect (1–10 per size).\nPNG, RGB, no alpha channel.\n`);
+      targets.flatMap(t => {
+        const pose = t.display.poses?.[0] || 'portrait', any = t.display.poses ? '' : ' or landscape';
+        const sz = t.display.size[pose];
+        return [`${targetLabel(t)}: ${folderName(t)} (${sz.width} × ${sz.height}${any})`,
+          ...(t.display.alsoExport || []).map(x => `${targetLabel(t)}: ${x.folder} (${x.size[pose].width} × ${x.size[pose].height}${any})`)];
+      }).join('\n') +
+      `\n\nUpload each folder to the matching device size in App Store Connect (1–10 per size).\n` +
+      (targets.some(t => t.display.alsoExport) ? `iPhone: iPhone-6.3in goes in "6.3-inch Display" (iPhone with Dynamic Island, medium display), which App Store Connect requires;\niPhone-6.9in goes in the optional "6.9-inch Display".\n` : '') +
+      `PNG, RGB, no alpha channel.\n`);
     const out = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(out);

@@ -10,6 +10,11 @@
 // so every iPhone frame exports at that size; the model only picks the frame. PNG or JPEG, no alpha.
 const sizes = (w, h) => ({ portrait: { width: w, height: h }, landscape: { width: h, height: w } });
 
+// App Store Connect now requires the 6.3″ class ("iPhone with Dynamic Island (medium display)", 1206 × 2622)
+// and only accepts 6.9″ captures in the optional large-display slot, so every iPhone screenshot is also
+// exported at 6.3″, from the same design. Checked against Apple's screenshot specifications, 2026-10-29.
+const IPHONE_63 = [{ folder: 'iPhone-6.3in', size: sizes(1206, 2622) }];
+
 // Screens that share a screenshot: every iPhone takes the same capture, the Duo has one per display.
 export const SCREENS = {
   'duo/inner': 'iPhone Duo inner display',
@@ -44,7 +49,7 @@ export const DEVICES = [
   },
   {
     id: 'iphone-18-pro-max', family: 'iphone', name: 'iPhone 18 Pro Max', short: '18 Pro Max', note: '6.9″ display',
-    displays: [{ id: 'main', label: '', size: sizes(1320, 2868), screen: 'iphone', poses: ['portrait'] }],
+    displays: [{ id: 'main', label: '', size: sizes(1320, 2868), screen: 'iphone', poses: ['portrait'], alsoExport: IPHONE_63 }],
     geometry: { w: 1176, h: 2400, screen: { x: 60, y: 53, w: 1056, h: 2294 }, radii: [150, 150, 150, 150] },
     colors: [
       { id: 'black', name: 'Black', swatch: '#2c2c2e' },
@@ -55,7 +60,7 @@ export const DEVICES = [
   },
   {
     id: 'iphone-air', family: 'iphone', name: 'iPhone Air', short: 'Air', note: '6.9″ display',
-    displays: [{ id: 'main', label: '', size: sizes(1320, 2868), screen: 'iphone', poses: ['portrait'] }],
+    displays: [{ id: 'main', label: '', size: sizes(1320, 2868), screen: 'iphone', poses: ['portrait'], alsoExport: IPHONE_63 }],
     geometry: { w: 1150, h: 2400, screen: { x: 50, y: 60, w: 1050, h: 2280 }, radii: [157, 157, 157, 157] },
     colors: [
       { id: 'space-black', name: 'Space Black', swatch: '#2a2a2c' },
@@ -66,7 +71,7 @@ export const DEVICES = [
   },
   {
     id: 'iphone-18-pro', family: 'iphone', name: 'iPhone 18 Pro', short: '18 Pro', note: '6.9″ display',
-    displays: [{ id: 'main', label: '', size: sizes(1320, 2868), screen: 'iphone', poses: ['portrait'] }],
+    displays: [{ id: 'main', label: '', size: sizes(1320, 2868), screen: 'iphone', poses: ['portrait'], alsoExport: IPHONE_63 }],
     geometry: { w: 1174, h: 2400, screen: { x: 63, y: 60, w: 1048, h: 2280 }, radii: [160, 160, 160, 160] },
     colors: [
       { id: 'black', name: 'Black', swatch: '#2c2c2e' },
